@@ -83,6 +83,13 @@ describe('bibliography and evidence', () => {
     expect(arxivRecords('<feed></feed>').records).toEqual([]);
     expect(arxivRecords(atom.replace('2401.12345v2', 'error')).warnings).toHaveLength(1);
   });
+  it('normalizes arXiv URLs case-insensitively when parsing results', () => {
+    const mixed = atom.replace(
+      'http://arxiv.org/abs/2401.12345v2',
+      'HTTPS://EXPORT.ARXIV.ORG/ABS/2401.12345v2',
+    );
+    expect(arxivRecords(mixed).records[0].id).toBe(arxivRecords(atom).records[0].id);
+  });
   it('imports Zotero exported unknown fields rather than synthesizing a different entry', () => {
     const result = zoteroRecords([
       {

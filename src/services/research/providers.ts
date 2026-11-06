@@ -32,7 +32,7 @@ export function arxivRecords(xml: string) {
     warnings: string[] = [];
   for (const match of xml.matchAll(/<(?:\w+:)?entry(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?entry>/g)) {
     const entry = match[1],
-      id = tag(entry, 'id').replace(/^https?:\/\/(?:export\.)?arxiv\.org\/abs\//, '');
+      id = tag(entry, 'id').replace(/^https?:\/\/(?:export\.)?arxiv\.org\/abs\//i, '');
     if (!/^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i.test(id)) {
       warnings.push('An arXiv result could not be read; no metadata was invented.');
       continue;
