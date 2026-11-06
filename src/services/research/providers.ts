@@ -88,10 +88,15 @@ export function zoteroRecords(input: unknown) {
       title: str(data.title),
       authors: Array.isArray(data.creators)
         ? data.creators
-            .map(
-              (c: Record<string, unknown>) =>
-                str(c.name) || [str(c.firstName), str(c.lastName)].filter(Boolean).join(' '),
-            )
+            .map((c: unknown) => {
+              if (!c || typeof c !== 'object') return '';
+              const creator = c as Record<string, unknown>;
+              return (
+                str(creator.name) ||
+                [str(creator.firstName), str(creator.lastName)].filter(Boolean).join(' ')
+              );
+            })
+            .filter(Boolean)
             .join(' and ')
         : '',
       year: str(data.date),

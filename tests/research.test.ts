@@ -102,6 +102,30 @@ describe('bibliography and evidence', () => {
     expect(result.records[0].authors).toBe('Team');
     expect(zoteroRecords([{ data: { title: 'Incomplete' } }]).warnings).toHaveLength(1);
   });
+  it('skips malformed Zotero creators while preserving valid names', () => {
+    const result = zoteroRecords([
+      {
+        key: 'ABC',
+        data: {
+          title: 'Work',
+          creators: [
+            null,
+            undefined,
+            42,
+            'invalid',
+            {},
+            { name: 7 },
+            { name: 'Team' },
+            { firstName: 'Jane', lastName: 'Doe' },
+          ],
+        },
+        bibtex: bib,
+      },
+    ]);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].authors).toBe('Team and Jane Doe');
+    expect(result.records[0].bibtex).toBe(bib);
+  });
   it('uses bounded GET requests and reports rate limits, partial feeds and failures', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(atom));
     await retrieve('arxiv', 'test claim', new AbortController().signal, fetcher);
