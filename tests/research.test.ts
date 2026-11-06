@@ -83,6 +83,13 @@ describe('bibliography and evidence', () => {
     expect(arxivRecords('<feed></feed>').records).toEqual([]);
     expect(arxivRecords(atom.replace('2401.12345v2', 'error')).warnings).toHaveLength(1);
   });
+  it('normalizes arXiv URLs case-insensitively when parsing results', () => {
+    const mixed = atom.replace(
+      'http://arxiv.org/abs/2401.12345v2',
+      'HTTPS://EXPORT.ARXIV.ORG/ABS/2401.12345v2',
+    );
+    expect(arxivRecords(mixed).records[0].id).toBe(arxivRecords(atom).records[0].id);
+  });
   it('imports Zotero exported unknown fields rather than synthesizing a different entry', () => {
     const result = zoteroRecords([
       {
@@ -94,6 +101,30 @@ describe('bibliography and evidence', () => {
     expect(result.records[0].bibtex).toBe(bib);
     expect(result.records[0].authors).toBe('Team');
     expect(zoteroRecords([{ data: { title: 'Incomplete' } }]).warnings).toHaveLength(1);
+  });
+  it('skips malformed Zotero creators while preserving valid names', () => {
+    const result = zoteroRecords([
+      {
+        key: 'ABC',
+        data: {
+          title: 'Work',
+          creators: [
+            null,
+            undefined,
+            42,
+            'invalid',
+            {},
+            { name: 7 },
+            { name: 'Team' },
+            { firstName: 'Jane', lastName: 'Doe' },
+          ],
+        },
+        bibtex: bib,
+      },
+    ]);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].authors).toBe('Team and Jane Doe');
+    expect(result.records[0].bibtex).toBe(bib);
   });
   it('uses bounded GET requests and reports rate limits, partial feeds and failures', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(atom));

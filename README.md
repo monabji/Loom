@@ -13,7 +13,7 @@ Loom brings your manuscript, references, PDF preview, and AI agents into one des
 
 Your paper lives in an ordinary folder of `.tex`, `.bib`, and asset files. Open it in Loom, use it with your existing tools, and collaborate through Git.
 
-## What you can do with Loom : 
+## What you can do with Loom :
 
 - **Bring your agents:** Connect OpenCode or Codex (for now) and work with the models available through each harness. Agents use their own authentication, permissions, and tooling, so you can keep the workflows you've already set up.
 - **One project, multiple agents:** Connect agents to the same paper and switch between them as you work. Recent conversation context carries across when you switch; Loom runs one agent request at a time per project.

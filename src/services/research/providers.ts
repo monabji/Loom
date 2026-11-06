@@ -32,7 +32,7 @@ export function arxivRecords(xml: string) {
     warnings: string[] = [];
   for (const match of xml.matchAll(/<(?:\w+:)?entry(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?entry>/g)) {
     const entry = match[1],
-      id = tag(entry, 'id').replace(/^https?:\/\/(?:export\.)?arxiv\.org\/abs\//, '');
+      id = tag(entry, 'id').replace(/^https?:\/\/(?:export\.)?arxiv\.org\/abs\//i, '');
     if (!/^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i.test(id)) {
       warnings.push('An arXiv result could not be read; no metadata was invented.');
       continue;
@@ -88,10 +88,15 @@ export function zoteroRecords(input: unknown) {
       title: str(data.title),
       authors: Array.isArray(data.creators)
         ? data.creators
-            .map(
-              (c: Record<string, unknown>) =>
-                str(c.name) || [str(c.firstName), str(c.lastName)].filter(Boolean).join(' '),
-            )
+            .map((c: unknown) => {
+              if (!c || typeof c !== 'object') return '';
+              const creator = c as Record<string, unknown>;
+              return (
+                str(creator.name) ||
+                [str(creator.firstName), str(creator.lastName)].filter(Boolean).join(' ')
+              );
+            })
+            .filter(Boolean)
             .join(' and ')
         : '',
       year: str(data.date),
