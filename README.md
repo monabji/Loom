@@ -56,6 +56,8 @@ npm run setup:latex
 
 This downloads a user-local TinyTeX distribution and TexLab under your home directory while preserving existing installations. You can review [the setup script](scripts/setup-latex.mjs) before running it.
 
+For candidate installation, checksum verification, backup, and manual upgrades, see the [Linux installation guide](docs/releases/linux/install.md). The [release checklist](docs/releases/linux/README.md) distinguishes verified results from outstanding stable-release gates.
+
 ## Development
 
 ```sh
