@@ -6,14 +6,17 @@ import { join, resolve } from 'node:path';
 let app: ElectronApplication;
 let page: Page;
 let dir: string;
-async function launch() {
+async function launch(executablePath?: string) {
   const env = Object.fromEntries(
     Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string'),
   );
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
   app = await _electron.launch({
-    ...electronLaunchOptions(process.env, [`--user-data-dir=${join(dir, 'data')}`]),
+    ...electronLaunchOptions(
+      executablePath ? { ...process.env, LOOM_E2E_EXECUTABLE: executablePath } : process.env,
+      [`--user-data-dir=${join(dir, 'data')}`],
+    ),
     env,
     chromiumSandbox: true,
   });
@@ -63,7 +66,7 @@ test.beforeEach(async ({}, testInfo) => {
       '.loom-manager-',
     ),
   );
-  await launch();
+  await launch(process.env.LOOM_E2E_UPGRADE_FROM);
   await size(1440, 900);
 });
 test.afterEach(async () => {

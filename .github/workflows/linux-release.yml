@@ -36,6 +36,14 @@ jobs:
           npm run linux:checksum -- "$appimage"
           npm run linux:verify-checksum -- "$appimage"
           echo "path=$appimage" >> "$GITHUB_OUTPUT"
+      - name: Verify packaged launcher keeps sandboxing enabled
+        shell: bash
+        run: |
+          mkdir -p artifacts/appimage-inspection
+          cd artifacts/appimage-inspection
+          "${{ github.workspace }}/${{ steps.appimage.outputs.path }}" --appimage-extract > extract.log
+          cd "${{ github.workspace }}"
+          node scripts/linux-release-verify-appdir.mjs artifacts/appimage-inspection/squashfs-root
       - name: Run packaged fixture journeys under Xvfb
         env:
           LOOM_E2E_EXECUTABLE: ${{ github.workspace }}/${{ steps.appimage.outputs.path }}
