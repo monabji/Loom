@@ -95,6 +95,22 @@
     },
     "extraResources": [
       {
+        "from": "LICENSE",
+        "to": "notices/Loom-LICENSE.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "notices/README.md"
+      },
+      {
+        "from": "design/brand/fonts/OFL.txt",
+        "to": "notices/Manrope-OFL.txt"
+      },
+      {
+        "from": "src/renderer/ui/provider-assets/README.md",
+        "to": "notices/provider-marks.md"
+      },
+      {
         "from": "examples/phase-3/multi-file",
         "to": "examples/phase-3/multi-file"
       },

@@ -11,7 +11,7 @@ The canonical specification is [the release spec](../../../.scratch/linux-stable
 - [x] Run baseline and integrated standard checks. First integration passes; final post-review build is pending.
 - [x] Prove the project verification skill using existing Electron tests. Extracted candidate project startup passed.
 - [x] Audit complete journeys, keyboard, small windows, failures, and recovery on the developer host. See `artifacts/linux-release/ux-audit.md`; clean desktop integration remains open.
-- [x] Wire packaged checks, checksum generation, and artifact-only release automation. The remote workflow has not been executed.
+- [x] Wire packaged checks, checksum generation, distribution notices, and artifact-only release automation. The remote workflow has not been executed.
 - [x] Review dependencies and changed security boundaries. Production audit and published Electron ranges checked; moderate build-tool candidate exception recorded.
 - [ ] Verify current and upgraded synthetic data with the packaged candidate.
 - [ ] Verify exact AppImage on clean Ubuntu 24.04 GNOME Wayland and X11.
@@ -37,6 +37,7 @@ The canonical specification is [the release spec](../../../.scratch/linux-stable
 - ZIP paper imports now exclude every `.git` component, matching folder import behavior. Nine inert archive regressions preserve ordinary source and assets.
 - AppImage packaging uses a reviewed launcher that preserves Electron sandboxing. The actual extracted launcher and desktop entry are checked before CI runtime tests.
 - All Electron suites select the same packaged executable. An optional previous-build selector permits a synthetic-profile upgrade check through the existing startup journey.
+- Loom, Manrope, and provider notices are bundled with exact-byte checks, alongside Electron and Chromium notices.
 - SHA-256 generation and tamper verification are automated. The manual CI workflow builds and retains candidates without publishing a release.
 - Installation, backup, replacement, known gaps, and verification guidance are documented.
 
