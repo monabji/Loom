@@ -464,6 +464,29 @@ describe('ordinary projects and persistence', () => {
     await service.importFolder(root, join(dir, 'copied'));
     expect(await readFile(join(root, 'main.tex'), 'utf8')).toBe('alpha\nbeta\ngamma\n');
   });
+  it('excludes Git metadata from ZIP imports like folder imports', async () => {
+    const files = {
+      'main.tex': strToU8('Synthetic paper'),
+      'figures/a.bin': new Uint8Array([0, 255, 3]),
+      '.git/config': strToU8('[core]\n\tbare = false\n'),
+    };
+    const source = join(dir, 'source');
+    for (const [path, bytes] of Object.entries(files)) {
+      await mkdir(join(source, path, '..'), { recursive: true });
+      await writeFile(join(source, path), bytes);
+    }
+    const archive = join(dir, 'metadata.zip');
+    await writeFile(archive, zipSync(files));
+    for (const kind of ['folder', 'zip']) {
+      const destination = join(dir, kind);
+      if (kind === 'folder') await service.importFolder(source, destination);
+      else await service.importZip(archive, destination);
+      expect(await readFile(join(destination, 'main.tex'), 'utf8')).toBe('Synthetic paper');
+      expect(await readFile(join(destination, 'figures/a.bin'))).toEqual(Buffer.from([0, 255, 3]));
+      await expect(fs.lstat(join(destination, '.git'))).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+    expect(await readFile(join(source, '.git/config'))).toEqual(Buffer.from(files['.git/config']));
+  });
   it('persists preferences and rejects newer metadata versions', async () => {
     await service.command({ type: 'preferences', value: '{"font":14}' });
     await service.open(root);
