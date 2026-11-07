@@ -32,6 +32,131 @@ function fixture() {
 }
 
 describe('Codex adapter protocol boundaries', () => {
+  it.each(['once', 'reject'] as const)(
+    'shows matching file-change paths without diffs and preserves the %s reply',
+    async (reply) => {
+      const { adapter, child } = fixture();
+      adapter.rpc = vi.fn(async () => ({ thread: { id: 'thread' } }));
+      await adapter.create('/paper');
+      // Codex 0.159.3 generate-ts: paths belong to ThreadItem.changes,
+      // while FileChangeRequestApprovalParams refers to that item by itemId.
+      for (const [id, changes] of [
+        ['other', [{ path: '/paper/unrelated.tex', kind: { type: 'add' }, diff: 'PRIVATE' }]],
+        [
+          'patch',
+          [
+            { path: '/paper/main.tex', kind: { type: 'add' }, diff: 'PRIVATE SOURCE' },
+            { path: '/paper/old.tex', kind: { type: 'delete' }, diff: 'PRIVATE SOURCE' },
+            {
+              path: '/paper/notes.tex',
+              kind: { type: 'update', move_path: '/paper/sections/notes.tex' },
+              diff: 'SYNTHETIC_SECRET=do-not-display',
+            },
+          ],
+        ],
+      ]) {
+        adapter.receive({
+          method: 'item/started',
+          params: {
+            threadId: 'thread',
+            turnId: 'turn',
+            startedAtMs: 1,
+            item: { type: 'fileChange', id, changes, status: 'inProgress' },
+          },
+        });
+      }
+      adapter.receive({
+        id: 104,
+        method: 'item/fileChange/requestApproval',
+        params: {
+          threadId: 'thread',
+          turnId: 'turn',
+          itemId: 'patch',
+          startedAtMs: 2,
+          reason: null,
+          grantRoot: null,
+        },
+      });
+      expect((await adapter.pending('thread')).permissions).toEqual([
+        {
+          id: '104',
+          action: 'Change project files',
+          resources: [
+            '/paper/main.tex',
+            '/paper/old.tex',
+            '/paper/notes.tex',
+            '/paper/sections/notes.tex',
+          ],
+        },
+      ]);
+      expect(child.stdin.write).not.toHaveBeenCalled();
+      await adapter.permission('thread', '104', reply);
+      expect(child.stdin.write).toHaveBeenCalledWith(
+        JSON.stringify({ id: 104, result: { decision: reply === 'once' ? 'accept' : 'decline' } }) +
+          '\n',
+      );
+      expect((await adapter.pending('thread')).permissions).toEqual([]);
+    },
+  );
+
+  it('keeps file-change paths scoped to their session and active item', async () => {
+    const { adapter } = fixture();
+    adapter.rpc = vi.fn(async () => ({ thread: { id: 'first' } }));
+    await adapter.create('/paper');
+    adapter.rpc = vi.fn(async () => ({ thread: { id: 'second' } }));
+    await adapter.create('/other');
+    const params = {
+      threadId: 'first',
+      turnId: 'turn',
+      item: {
+        type: 'fileChange',
+        id: 'patch',
+        changes: [{ path: '/paper/main.tex', kind: { type: 'add' }, diff: 'PRIVATE' }],
+        status: 'inProgress',
+      },
+    };
+    adapter.receive({ method: 'item/started', params });
+    for (const threadId of ['first', 'second']) {
+      adapter.receive({
+        id: threadId,
+        method: 'item/fileChange/requestApproval',
+        params: { threadId, turnId: 'turn', itemId: 'patch', reason: 'Review this change' },
+      });
+    }
+    expect((await adapter.pending('first')).permissions[0].resources).toEqual(['/paper/main.tex']);
+    expect((await adapter.pending('second')).permissions[0].resources).toEqual([
+      'Review this change',
+    ]);
+    adapter.receive({ method: 'item/completed', params });
+    expect((await adapter.pending('first')).permissions[0].resources).toEqual([
+      'Review this change',
+    ]);
+  });
+
+  it.each([undefined, [{ path: 42, kind: { type: 'add' }, diff: 'PRIVATE' }]])(
+    'keeps the fallback for missing or malformed file-change paths (%j)',
+    async (changes) => {
+      const { adapter } = fixture();
+      adapter.rpc = vi.fn(async () => ({ thread: { id: 'thread' } }));
+      await adapter.create('/paper');
+      adapter.receive({
+        method: 'item/started',
+        params: {
+          threadId: 'thread',
+          item: { type: 'fileChange', id: 'patch', changes, status: 'inProgress' },
+        },
+      });
+      adapter.receive({
+        id: 105,
+        method: 'item/fileChange/requestApproval',
+        params: { threadId: 'thread', itemId: 'patch' },
+      });
+      expect((await adapter.pending('thread')).permissions[0].resources).toEqual([
+        'Requested native operation',
+      ]);
+    },
+  );
+
   it('exposes the native command and actual completed output and exit status', async () => {
     const { adapter } = fixture();
     adapter.rpc = vi.fn(async () => ({ thread: { id: 'thread' } }));

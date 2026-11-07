@@ -12,6 +12,25 @@ import { StringDecoder } from 'node:string_decoder';
 import { imageMime } from '../../domain/images';
 import { executionEvidence } from './evidence';
 import { AgentRequestError, AgentSessionError } from './request-error';
+import { z } from 'zod';
+
+// Codex file-change approvals reference an itemId; only item notifications carry paths.
+// Strip diffs and any other payload fields before retaining permission context.
+const fileChangePaths = z
+  .array(
+    z.object({
+      path: z.string().min(1).max(3000),
+      kind: z.object({ move_path: z.string().min(1).max(3000).nullish() }),
+    }),
+  )
+  .transform((changes) => {
+    const paths = [
+      ...new Set(changes.flatMap((change) => [change.path, change.kind.move_path ?? ''])),
+    ].filter(Boolean);
+    return paths.length <= 100
+      ? paths
+      : [...paths.slice(0, 99), `${paths.length - 99} additional file paths omitted`];
+  });
 
 type Session = {
   directory: string;
@@ -19,6 +38,7 @@ type Session = {
   turnId: string;
   running: boolean;
   outcome: string;
+  fileChangePaths: Map<string, string[]>;
   permissions: Map<
     string,
     { nativeId: string | number; method: string; params: Record<string, unknown> }
@@ -279,6 +299,12 @@ export class CodexAdapter implements HarnessAdapter {
       const item = object(p.item),
         type = string(item.type),
         id = string(item.id);
+      if (type === 'fileChange') {
+        if (method === 'item/started') {
+          const paths = fileChangePaths.safeParse(item.changes);
+          session.fileChangePaths.set(id, paths.success ? paths.data : []);
+        } else session.fileChangePaths.delete(id);
+      }
       if (type === 'agentMessage' && method === 'item/completed') {
         const old = session.messages.find((m) => m.id === id);
         if (old) old.text = string(item.text).slice(0, 100000);
@@ -315,6 +341,7 @@ export class CodexAdapter implements HarnessAdapter {
       }
     }
     if (method === 'turn/completed') {
+      session.fileChangePaths.clear();
       const turn = object(p.turn);
       session.running = false;
       session.turnId = '';
@@ -394,6 +421,7 @@ export class CodexAdapter implements HarnessAdapter {
       turnId: '',
       running: false,
       outcome: '',
+      fileChangePaths: new Map(),
       permissions: new Map(),
       questions: new Map(),
     });
@@ -421,6 +449,7 @@ export class CodexAdapter implements HarnessAdapter {
       turnId: '',
       running: string(object(thread.status).type) === 'active',
       outcome: '',
+      fileChangePaths: new Map(),
       permissions: new Map(),
       questions: new Map(),
     };
@@ -527,22 +556,32 @@ export class CodexAdapter implements HarnessAdapter {
   async pending(sessionId: string) {
     const s = this.sessions.get(sessionId);
     return {
-      permissions: [...(s?.permissions ?? [])].map(([id, r]) => ({
-        id,
-        action: r.method.includes('fileChange')
-          ? 'Change project files'
-          : r.method.includes('permissions')
-            ? 'Grant access for this agent request'
-            : 'Run a command',
-        resources: [
-          ...(r.method.includes('permissions')
-            ? [
-                string(r.params.reason, 'Requested native access'),
-                JSON.stringify(r.params.permissions).slice(0, 3000),
-              ]
-            : [string(r.params.command, string(r.params.reason, 'Requested native operation'))]),
-        ],
-      })),
+      permissions: [...(s?.permissions ?? [])].map(([id, r]) => {
+        const paths =
+          r.method === 'item/fileChange/requestApproval'
+            ? s?.fileChangePaths.get(string(r.params.itemId))
+            : undefined;
+        return {
+          id,
+          action: r.method.includes('fileChange')
+            ? 'Change project files'
+            : r.method.includes('permissions')
+              ? 'Grant access for this agent request'
+              : 'Run a command',
+          resources: [
+            ...(r.method.includes('permissions')
+              ? [
+                  string(r.params.reason, 'Requested native access'),
+                  JSON.stringify(r.params.permissions).slice(0, 3000),
+                ]
+              : paths?.length
+                ? paths
+                : [
+                    string(r.params.command, string(r.params.reason, 'Requested native operation')),
+                  ]),
+          ],
+        };
+      }),
       questions: [...(s?.questions ?? [])].map(([id, r]) => ({
         id,
         title:
