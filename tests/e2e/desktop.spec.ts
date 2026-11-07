@@ -93,6 +93,7 @@ test.afterEach(async () => {
 });
 
 test('real isolated Electron boundary and a restartable utility process', async () => {
+  expect(await desktop.evaluate(({ app }) => app.commandLine.hasSwitch('no-sandbox'))).toBe(false);
   const isolation = await desktop.evaluate(({ BrowserWindow }) => {
     // Electron 45 retains this diagnostic method at runtime but omits its TS declaration.
     const contents = BrowserWindow.getAllWindows()[0].webContents as unknown as {
