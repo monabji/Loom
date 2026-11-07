@@ -4,6 +4,7 @@ import { _electron, expect, test, type ElectronApplication, type Page } from '@p
 import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
+import packageJson from '../../package.json';
 
 let desktop: ElectronApplication;
 let page: Page;
@@ -148,6 +149,8 @@ test('real isolated Electron boundary and a restartable utility process', async 
   });
 
   const before = await readyPid();
+  const serviceStatus = await page.evaluate(() => window.loom!.getStatus());
+  expect(serviceStatus.ok && serviceStatus.value.version).toBe(packageJson.version);
   await page.getByRole('button', { name: 'Local service ready', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Electron desktop');
   await expect(page.getByRole('dialog')).toContainText(String(before));

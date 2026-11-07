@@ -14,6 +14,7 @@ import { gitCommandSchema, gitResultSchema } from '../contracts/git';
 import { cloneRepository, GitService } from './git/service';
 import { sourceArchive, sourcePreflight } from './git/export';
 import { z } from 'zod';
+import { version as loomVersion } from '../../package.json';
 let removingProject = false;
 const trashResults = new Map<string, (error: string | null) => void>();
 const trashResultSchema = z
@@ -90,7 +91,7 @@ const request = z
 port.on('message', (event: { data: unknown }) => {
   const ping = serviceRequestSchema.safeParse(event.data);
   if (ping.success) {
-    port.postMessage({ type: 'pong', id: ping.data.id, pid: process.pid, version: '0.1.0' });
+    port.postMessage({ type: 'pong', id: ping.data.id, pid: process.pid, version: loomVersion });
     return;
   }
   const trashResult = trashResultSchema.safeParse(event.data);
@@ -622,4 +623,4 @@ port.on('message', (event: { data: unknown }) => {
       }),
     );
 });
-port.postMessage({ type: 'ready', pid: process.pid, version: '0.1.0' });
+port.postMessage({ type: 'ready', pid: process.pid, version: loomVersion });

@@ -1,4 +1,5 @@
 import { LoomLogo } from '../ui/LoomLogo';
+import { version as loomVersion } from '../../../package.json';
 import { ProjectManager } from '../projects/ProjectManager';
 import '../projects/projects.css';
 import { AppearanceDialog, createAppearance } from '../appearance/Appearance';
@@ -286,7 +287,7 @@ export function Workspace() {
   const [service, setService] = createSignal<ServiceStatus>({
     state: 'starting',
     pid: null,
-    version: '0.1.0',
+    version: loomVersion,
   });
   const [serviceError, setServiceError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -491,7 +492,7 @@ export function Workspace() {
     setServiceError('');
     try {
       if (!window.loom) {
-        setService({ state: 'unavailable', pid: null, version: '0.1.0' });
+        setService({ state: 'unavailable', pid: null, version: loomVersion });
         setServiceError(
           'Desktop service is unavailable in the browser preview. Open the Electron app with npm run dev.',
         );
@@ -500,11 +501,11 @@ export function Workspace() {
       const result = await (restart ? window.loom.restartService() : window.loom.getStatus());
       if (result.ok) setService(result.value);
       else {
-        setService({ state: 'unavailable', pid: null, version: '0.1.0' });
+        setService({ state: 'unavailable', pid: null, version: loomVersion });
         setServiceError(result.error.message);
       }
     } catch {
-      setService({ state: 'unavailable', pid: null, version: '0.1.0' });
+      setService({ state: 'unavailable', pid: null, version: loomVersion });
       setServiceError('Could not reach the desktop service. Retry the connection.');
     } finally {
       setBusy(false);

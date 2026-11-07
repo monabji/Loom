@@ -10,6 +10,7 @@ import {
   type ServiceEvent,
   type ServiceStatus,
 } from '../contracts/desktop';
+import { version as loomVersion } from '../../package.json';
 
 export interface ServiceTransport {
   postMessage(message: unknown): void;
@@ -29,7 +30,7 @@ export class ServiceController {
   private generation = 0;
   private nextId = 0;
   projectLocation: { projectId: string; path: string } | null = null;
-  private status: ServiceStatus = { state: 'unavailable', pid: null, version: '0.1.0' };
+  private status: ServiceStatus = { state: 'unavailable', pid: null, version: loomVersion };
   private listeners = new Set<(event: ServiceEvent) => void>();
   private projectPending = new Map<
     string,
@@ -105,7 +106,7 @@ export class ServiceController {
       }
     }
     const result = failure(code, message);
-    this.status = { state: 'unavailable', pid: null, version: '0.1.0' };
+    this.status = { state: 'unavailable', pid: null, version: loomVersion };
     this.finishStartup(result);
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
@@ -146,7 +147,7 @@ export class ServiceController {
     if (this.status.state === 'ready')
       return Promise.resolve({ ok: true, value: { ...this.status } });
     const generation = ++this.generation;
-    this.status = { state: 'starting', pid: null, version: '0.1.0' };
+    this.status = { state: 'starting', pid: null, version: loomVersion };
     this.publish();
     const startup = new Promise<Result<ServiceStatus>>((resolve) => {
       this.startupResolve = resolve;

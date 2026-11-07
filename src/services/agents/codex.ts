@@ -1,4 +1,5 @@
 import { runTool, spawnOwnedTool } from '../latex/tools';
+import { version as loomVersion } from '../../../package.json';
 import { object, list, string, type HarnessAdapter } from './opencode';
 import {
   defaultAgentSettings,
@@ -134,7 +135,7 @@ export class CodexAdapter implements HarnessAdapter {
     const adapter = new CodexAdapter(found.executable, directory, found.version, tool);
     try {
       await adapter.rpc('initialize', {
-        clientInfo: { name: 'loom', title: 'Loom', version: '0.1.0' },
+        clientInfo: { name: 'loom', title: 'Loom', version: loomVersion },
         capabilities: { experimentalApi: true },
       });
       adapter.write({ method: 'initialized' });

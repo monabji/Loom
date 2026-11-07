@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http';
+import { version as loomVersion } from '../../../package.json';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { relativePath } from '../../contracts/project';
@@ -209,7 +210,7 @@ export class AgentTools {
           result = {
             protocolVersion: '2024-11-05',
             capabilities: { tools: {} },
-            serverInfo: { name: 'loom-paper', version: '0.1.0' },
+            serverInfo: { name: 'loom-paper', version: loomVersion },
           };
         else if (call.method === 'ping') result = {};
         else if (call.method === 'tools/list')
