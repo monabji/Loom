@@ -109,11 +109,16 @@ it('protects the active project, its parent, symlink replacements and unsaved re
   await expect(service.removeProject(nested.id, 'trash', trash)).rejects.toThrow('open');
   await expect(service.removeProject(parent.id, 'trash', trash)).rejects.toThrow('open');
   expect((await service.library()).every((p) => p.deleteBlockedReason)).toBe(true);
+  await service.reopen(parent.id);
+  expect(service.snapshot().files.some((file) => file.path === 'Nested/main.tex')).toBe(true);
+  await expect(service.removeProject(nested.id, 'trash', trash)).rejects.toThrow('open');
+  expect(
+    (await service.library()).find((entry) => entry.id === nested.id)?.deleteBlockedReason,
+  ).toBeTruthy();
   const a = await service.create(join(directory, 'Unsaved'));
   const stored = JSON.parse(store.load(join(directory, 'Unsaved'))!);
   stored.files[0].conflict = true;
   store.save(join(directory, 'Unsaved'), JSON.stringify(stored));
-  // Switch without overwriting the recovery record from the prior live instance.
   const restarted = new ProjectService(store);
   await restarted.create(join(directory, 'Other'));
   await expect(restarted.removeProject(a.id, 'trash', trash)).rejects.toThrow('save or resolve');
@@ -231,8 +236,11 @@ it('blocks reuse of a folder with an unknown native Trash outcome until restart'
   directory = await mkdtemp(join(tmpdir(), 'loom-trash-unknown-'));
   store = new MetadataStore(join(directory, 'data'));
   const service = new ProjectService(store);
-  const path = join(directory, 'Uncertain');
+  const parentPath = join(directory, 'Parent');
+  const parent = await service.create(parentPath);
+  const path = join(parentPath, 'Uncertain');
   const paper = await service.create(path);
+  const nested = await service.create(join(path, 'Nested'));
   await service.create(join(directory, 'Sibling'));
   const error = new Error('Native reply timed out');
   error.name = 'TrashOutcomeUnknown';
@@ -242,6 +250,11 @@ it('blocks reuse of a folder with an unknown native Trash outcome until restart'
     }),
   ).rejects.toThrow('timed out');
   await expect(service.open(path)).rejects.toThrow('not confirmed');
+  await expect(service.open(parentPath)).rejects.toThrow('not confirmed');
+  const trash = vi.fn(async () => {});
+  await expect(service.removeProject(parent.id, 'trash', trash)).rejects.toThrow('did not reply');
+  await expect(service.removeProject(nested.id, 'trash', trash)).rejects.toThrow('did not reply');
+  expect(trash).not.toHaveBeenCalled();
   expect((await service.library()).find((entry) => entry.id === paper.id)).toMatchObject({
     deleteBlockedReason: expect.stringContaining('did not reply'),
   });

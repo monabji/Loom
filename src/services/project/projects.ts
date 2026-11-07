@@ -42,6 +42,10 @@ type Project = {
   buildConfigRevision?: string;
 };
 const hash = (text: string | Uint8Array) => createHash('sha256').update(text).digest('hex');
+const foldersOverlap = (a: string, b: string) =>
+  a === b ||
+  a.startsWith(b.endsWith(sep) ? b : b + sep) ||
+  b.startsWith(a.endsWith(sep) ? a : a + sep);
 const MAX_FILE = 8 * 1024 * 1024;
 const DIFF_BUDGET = { timeout: 20, maxEditLength: 1000 };
 export class ProjectService {
@@ -192,12 +196,7 @@ export class ProjectService {
   }
   async open(path: string): Promise<ProjectSnapshot> {
     const root = await fs.realpath(path);
-    if (
-      [...this.uncertainTrash].some(
-        (pending) =>
-          root === pending || root.startsWith(pending + sep) || pending.startsWith(root + sep),
-      )
-    )
+    if ([...this.uncertainTrash].some((pending) => foldersOverlap(root, pending)))
       throw new Error(
         'System Trash has not confirmed this folder. Restart Loom and inspect its folder and Trash before reopening it.',
       );
@@ -280,18 +279,16 @@ export class ProjectService {
     }
   }
   private async deletionBlock(path: string): Promise<string | null> {
-    if (this.uncertainTrash.has(path))
+    if ([...this.uncertainTrash].some((pending) => foldersOverlap(path, pending)))
       return 'System Trash did not reply. Restart Loom and inspect the folder and Trash before retrying.';
     const active = this.root || this.store.get('lastProject');
     if (!active) return null;
     let current = active;
     try {
       current = await fs.realpath(active);
-    } catch {
-      // A disconnected active folder still owns its recovery data.
-    }
-    if (current === path || current.startsWith(path + sep))
-      return 'This folder is open or contains the open project. Close the project or open a different project before deleting it.';
+    } catch {}
+    if (foldersOverlap(current, path))
+      return 'This folder is open, contains the open project, or belongs to it. Close the project or open a different project before deleting it.';
     return null;
   }
   async removeProject(
