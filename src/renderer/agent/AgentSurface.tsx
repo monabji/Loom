@@ -488,12 +488,26 @@ export function AgentConversation(props: { agent: AgentWorkspace; onNewChat: () 
             </p>
           </Show>
           <Show when={a.state()?.running}>
-            <p class="agent-activity" role="status">
-              {a.state()?.permissions.length
-                ? 'Waiting for your permission'
-                : a.state()?.questions.length
-                  ? 'Waiting for your answer'
-                  : 'Thinking…'}
+            <p
+              class="agent-activity"
+              classList={{
+                'is-working':
+                  a.state()?.connection === 'connected' &&
+                  !a.state()?.permissions.length &&
+                  !a.state()?.questions.length &&
+                  !a.state()?.error,
+              }}
+              role="status"
+            >
+              {a.state()?.connection !== 'connected'
+                ? 'Connection interrupted · work is retained'
+                : a.state()?.error
+                  ? 'Checking agent status…'
+                  : a.state()?.permissions.length
+                    ? 'Waiting for your permission'
+                    : a.state()?.questions.length
+                      ? 'Waiting for your answer'
+                      : 'Thinking…'}
             </p>
           </Show>
           <For each={a.state()?.permissions}>
@@ -1113,28 +1127,67 @@ export function AgentComposer(props: {
             ? 'Checking agent connection…'
             : a.state()?.connection === 'interrupted'
               ? 'Agent interrupted'
-              : requestUncertain()
-                ? 'Request status uncertain'
-                : statusUnavailable()
-                  ? 'Agent status unavailable'
-                  : a.state()?.permissions.length
-                    ? 'Needs your permission'
-                    : a.state()?.questions.length
-                      ? 'Needs your answer'
-                      : running()
-                        ? 'Agent working'
-                        : ready()
-                          ? 'Agent connected'
-                          : 'Agent disconnected'}
+              : a.state()?.sessionUnavailable
+                ? 'Conversation needs recovery'
+                : requestUncertain()
+                  ? 'Request status uncertain'
+                  : statusUnavailable()
+                    ? 'Agent status unavailable'
+                    : a.state()?.permissions.length
+                      ? 'Needs your permission'
+                      : a.state()?.questions.length
+                        ? 'Needs your answer'
+                        : running()
+                          ? 'Agent working'
+                          : ready()
+                            ? 'Agent connected'
+                            : 'Agent disconnected'}
         </span>
       </div>
       <Show when={(a.error() || a.state()?.error) && a.state()?.connection !== 'interrupted'}>
-        <div class="agent-inline-error" role="alert">
+        <div
+          class="agent-inline-error"
+          classList={{ 'agent-recovery': !!a.state()?.restore && !a.error() }}
+          role={a.state()?.restore && !a.error() ? 'status' : 'alert'}
+        >
           <span>{a.error() || a.state()?.error}</span>
           <Show when={a.state()?.sessionUnavailable}>
-            <button class="text-button" disabled={a.busy()} onClick={props.onNewChat}>
-              New conversation
-            </button>
+            <Show
+              when={a.state()?.restore?.reason === 'missing'}
+              fallback={
+                <button
+                  class="text-button"
+                  disabled={a.busy() || running()}
+                  onClick={() => {
+                    const state = a.state();
+                    if (state?.sessionId)
+                      void a.act({
+                        type: 'retry-session',
+                        projectId: state.projectId,
+                        sessionId: state.sessionId,
+                      });
+                  }}
+                >
+                  Retry conversation
+                </button>
+              }
+            >
+              <button
+                class="text-button"
+                disabled={a.busy() || running()}
+                onClick={() => {
+                  const state = a.state();
+                  if (state?.sessionId)
+                    void a.act({
+                      type: 'recover-session',
+                      projectId: state.projectId,
+                      sessionId: state.sessionId,
+                    });
+                }}
+              >
+                Continue conversation
+              </button>
+            </Show>
           </Show>
           <button class="text-button" onClick={props.onConnect}>
             Connection details

@@ -324,7 +324,18 @@ export function ProjectPanel(props: {
           />
           <ActionMenu
             label="Project file options"
+            disabled={w.pending()}
             actions={[
+              {
+                label: 'Delete selected file',
+                icon: 'trash',
+                danger: true,
+                disabled: !w.file() || w.file()?.deleted || w.file()?.conflict,
+                run: () => {
+                  const file = w.file();
+                  if (file && !file.deleted && !file.conflict) editFile('delete', file);
+                },
+              },
               {
                 label: `Deleted files (${deleted().length})`,
                 icon: 'restore',

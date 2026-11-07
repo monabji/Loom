@@ -7,6 +7,8 @@ export function BuildFeedback(props: {
   onAction: () => void;
   onDetails?: () => void;
   onDismiss?: () => void;
+  onFix?: () => void;
+  fixBusy?: boolean;
 }) {
   return (
     <section class="pdf-feedback" aria-label="PDF guidance" role="status">
@@ -16,6 +18,15 @@ export function BuildFeedback(props: {
         <p class="muted">Your last successful PDF is still available below.</p>
       </Show>
       <div class="button-row">
+        <Show when={props.onFix}>
+          <button
+            class="secondary-button"
+            disabled={props.busy || props.fixBusy}
+            onClick={props.onFix}
+          >
+            Ask agent to fix
+          </button>
+        </Show>
         <button class="secondary-button" disabled={props.busy} onClick={props.onAction}>
           {
             {

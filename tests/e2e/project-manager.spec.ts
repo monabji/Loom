@@ -59,7 +59,10 @@ async function library() {
 test.beforeEach(async ({}, testInfo) => {
   dir = await mkdtemp(
     join(
-      testInfo.title.includes('project menu confirms Trash') ? homedir() : tmpdir(),
+      testInfo.title.includes('project menu confirms Trash') ||
+        testInfo.title.includes('closing the last project')
+        ? homedir()
+        : tmpdir(),
       '.loom-manager-',
     ),
   );
@@ -380,4 +383,52 @@ test('native close releases the last project and rejects stale project identitie
   ).toBeEnabled();
   await page.keyboard.press('Escape');
   await access(join(dir, 'Only project', 'main.tex'));
+});
+
+test('closing the last project saves writing, clears the workspace and permits deletion', async () => {
+  await create('Last paper');
+  await page.getByRole('textbox', { name: 'LaTeX source editor' }).fill('Saved before closing.');
+  await page
+    .getByRole('textbox', { name: 'Ask about your paper' })
+    .fill('Retain this unsent draft.');
+  await library();
+  await page.getByRole('button', { name: 'Close project', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Return to workspace', exact: true })).toHaveCount(
+    0,
+  );
+  expect(await readFile(join(dir, 'Last paper', 'main.tex'), 'utf8')).toBe('Saved before closing.');
+  await expect(page.getByRole('main', { name: 'Your projects' })).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+  await page.getByRole('button', { name: 'Options for Last paper', exact: true }).click();
+  await expect(
+    page.getByRole('menuitem', { name: 'Move project to Trash', exact: true }),
+  ).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Open Last paper', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).toContainText(
+    'Saved before closing.',
+  );
+  await expect(page.getByRole('textbox', { name: 'Ask about your paper' })).toHaveValue(
+    'Retain this unsent draft.',
+  );
+  await library();
+  await page.getByRole('button', { name: 'Close project', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Return to workspace', exact: true })).toHaveCount(
+    0,
+  );
+  await size(720, 540);
+  await page.getByRole('button', { name: 'Options for Last paper', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move project to Trash', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Move project to Trash?', exact: true });
+  await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await page.screenshot({ path: 'artifacts/loom-project-trash-small.png', animations: 'disabled' });
+  await confirmation.getByRole('button', { name: 'Move to Trash', exact: true }).click();
+  await expect(confirmation).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Open Last paper', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'A place for your next paper' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your projects', exact: true })).toBeFocused();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'A place for your next paper' })).toBeVisible();
 });

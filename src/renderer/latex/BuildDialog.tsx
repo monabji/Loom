@@ -15,6 +15,8 @@ export function BuildDialog(props: {
   onMainChosen: () => void;
   onOpenPaperFolder: () => void;
   onFiles: () => void;
+  onFix: () => void;
+  fixBusy: boolean;
 }) {
   const [settings, setSettings] = createSignal<BuildSettings>(defaultBuildSettings);
   const [saved, setSaved] = createSignal(false);
@@ -97,6 +99,8 @@ export function BuildDialog(props: {
             issue={value()}
             busy={props.workspace.pending() || props.latex.busy()}
             retained={!!props.latex.state()?.successful}
+            onFix={props.onFix}
+            fixBusy={props.fixBusy}
             onAction={() => {
               if (props.forceMainChoice && value().action === 'retry') {
                 mainSelect?.focus();

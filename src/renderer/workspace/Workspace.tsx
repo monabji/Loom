@@ -363,6 +363,14 @@ export function Workspace() {
   const pdfIssueKey = () =>
     JSON.stringify([projects.project()?.id, latex.state()?.current?.id, issue()]);
   const visiblePdfIssue = () => (dismissedPdfIssue() === pdfIssueKey() ? null : issue());
+  const fixPdf = () => {
+    if (agent.busy() || agent.submitting() || agent.state()?.running) return;
+    prepareScientificRequest(
+      'Fix the PDF creation problem in this paper. Inspect the current Loom diagnostics and relevant source files, make the necessary changes while preserving unrelated writing, then build the PDF and verify the result. If setup or permissions prevent a fix, explain the specific blocker.',
+      'Repair request prepared. Review and send it; Loom includes the latest PDF diagnostics automatically.',
+    );
+  };
+  const fixPdfBusy = () => agent.busy() || agent.submitting() || !!agent.state()?.running;
   const showPdf = () => update({ pdfOpen: true, mode: narrow() ? 'pdf' : 'split' });
   createAgentChangePreview({
     agent: agent.state,
@@ -567,6 +575,12 @@ export function Workspace() {
           error={projects.error()}
           current={projects.project()?.name}
           onContinue={() => navigateLibrary(false)}
+          onCloseProject={async () => {
+            if (!(await projects.closeProject()))
+              throw new Error(
+                'The project could not be closed. Save changes and stop active work.',
+              );
+          }}
           onChoose={(choice) => void openProject(choice)}
           onOpen={async (projectId) => {
             const opened = await projects.choose({ projectId });
@@ -1226,6 +1240,8 @@ export function Workspace() {
                   issue={problem()}
                   busy={projects.pending() || latex.busy()}
                   retained={!!latex.state()?.successful}
+                  onFix={fixPdf}
+                  fixBusy={fixPdfBusy()}
                   onAction={recoverPdf}
                   onDetails={() => setDialog('build')}
                   onDismiss={() => {
@@ -1433,6 +1449,8 @@ export function Workspace() {
         onCreatePdf={() => void createPdf(false)}
         onOpenPaperFolder={() => void openProject('main-folder', true)}
         onFiles={() => setDialog('files')}
+        onFix={fixPdf}
+        fixBusy={fixPdfBusy()}
       />
       <Modal
         open={dialog() === 'projects'}

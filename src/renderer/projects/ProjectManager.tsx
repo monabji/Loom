@@ -264,9 +264,14 @@ export function ProjectManager(props: {
                 class="text-button"
                 disabled={busy()}
                 onClick={() => {
+                  const close = props.onCloseProject;
+                  if (!close) return;
                   setRemoving(true);
-                  void props.onCloseProject!()
-                    .then(() => refresh())
+                  void close()
+                    .then(async () => {
+                      await refresh();
+                      document.getElementById('library-heading')?.focus();
+                    })
                     .catch(() =>
                       setError(
                         'Could not close the project. Save changes and stop active work before retrying.',

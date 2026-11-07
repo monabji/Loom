@@ -44,23 +44,27 @@ export function createProjectWorkspace(
     loading = new Set<string>();
   const file = () => project()?.files.find((f) => f.id === active()),
     live = (id: string) => docs.get(id);
+  function clearDocuments() {
+    clearTimeout(preferencesTimer);
+    for (const t of timers.values()) clearTimeout(t);
+    timers.clear();
+    for (const d of docs.values()) {
+      void d.persistence.destroy();
+      d.doc.destroy();
+    }
+    docs.clear();
+    loading.clear();
+    carets.clear();
+    setActive('');
+    setTabs([]);
+    setFont(14);
+    setWrap(true);
+    setStoredLayout(null);
+  }
   function accept(snapshot: ProjectSnapshot | null, ack?: { id: string; text: string }) {
     if (!snapshot) return;
     if (project()?.id !== snapshot.id) {
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-      for (const d of docs.values()) {
-        void d.persistence.destroy();
-        d.doc.destroy();
-      }
-      docs.clear();
-      loading.clear();
-      carets.clear();
-      setActive('');
-      setTabs([]);
-      setFont(14);
-      setWrap(true);
-      setStoredLayout(null);
+      clearDocuments();
       try {
         const p = JSON.parse(snapshot.preferences ?? '{}');
         if (typeof p.font === 'number' && p.font >= 11 && p.font <= 24) setFont(p.font);
@@ -355,6 +359,25 @@ export function createProjectWorkspace(
       d = docs.get(active());
     return !!f?.saved && (!d || (!d.dirty && d.doc.getText('source').toString() === d.baseline));
   };
+  async function closeProject() {
+    const current = project();
+    if (pending() || !current) return false;
+    setPending(true);
+    try {
+      if (!(await flushPending())) return false;
+      clearTimeout(preferencesTimer);
+      if (!(await persistPreferences())?.ok) return false;
+      const result = await request({ type: 'close-project', projectId: current.id });
+      if (!result?.ok) return false;
+      clearDocuments();
+      setProject(null);
+      setVersion((value) => value + 1);
+      report(`Closed ${current.name}.`);
+      return true;
+    } finally {
+      setPending(false);
+    }
+  }
   async function locate(id: string, offset: number, length = 0) {
     const projectId = project()?.id;
     await select(id);
@@ -468,6 +491,7 @@ export function createProjectWorkspace(
     command,
     flush,
     choose,
+    closeProject,
     newFile,
     flushPending,
     saveSession: async () => {

@@ -37,6 +37,7 @@ let modelsAvailable = true;
 let closeNextEventStream = false;
 let promptFailure: 'image413' | 'beforeAdmission503' | 'afterAdmission503' | null = null;
 let failStatusReads = false;
+let sessionLookupFailure: 404 | 503 | null = null;
 let includeSecondaryModel = false;
 let imageModel = false;
 let requestBodies: { path: string; method: string; body: Record<string, unknown> }[];
@@ -179,6 +180,7 @@ test.beforeEach(async () => {
   closeNextEventStream = false;
   promptFailure = null;
   failStatusReads = false;
+  sessionLookupFailure = null;
   includeSecondaryModel = false;
   imageModel = false;
   requests = [];
@@ -266,6 +268,14 @@ test.beforeEach(async () => {
       };
       value = { data: { id, location: { directory: root } } };
     } else if (s) {
+      if (id === 'session-0' && ids.length === 4 && sessionLookupFailure) {
+        res.writeHead(sessionLookupFailure, { 'Content-Type': 'application/json' }).end(
+          JSON.stringify({
+            name: sessionLookupFailure === 404 ? 'Not Found' : 'Service Unavailable',
+          }),
+        );
+        return;
+      }
       const native = () => ({
         id: s.id,
         location: { directory: root },
@@ -568,6 +578,8 @@ test('real Electron agent flow: context, permissions, retained questions, stream
     .fill('Revise the sentence for researchers.');
   await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
   await expect(page.getByText('Permission needed: edit', { exact: true })).toBeVisible();
+  await expect(page.locator('.agent-activity')).not.toHaveClass(/is-working/);
+  await expect(page.locator('.agent-activity')).toHaveText('Waiting for your permission');
   await page.getByRole('button', { name: 'Allow once', exact: true }).click();
   const audience = page.getByLabel('Audience', { exact: true });
   await audience.fill('Researchers outside physics');
@@ -1284,6 +1296,16 @@ test('polling resolves an ambiguous 503 when the server confirms the turn was ad
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByText('Continue this request.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Stop agent request' })).toBeEnabled();
+  const activity = page.locator('.agent-activity');
+  await expect(activity).toHaveClass(/is-working/);
+  await expect
+    .poll(() => activity.evaluate((element) => getComputedStyle(element, '::before').animationName))
+    .toBe('agent-working-pulse');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect
+    .poll(() => activity.evaluate((element) => getComputedStyle(element, '::before').animationName))
+    .toBe('none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   expect(
     requests.filter((request) => request === 'POST /api/session/session-0/prompt'),
   ).toHaveLength(1);
@@ -1733,8 +1755,22 @@ test('fix this error receives dismissed build diagnostics and source context wit
   await restartElectron();
   const guidance = page.getByRole('status', { name: 'PDF guidance' });
   await expect(guidance).toBeVisible();
+  const prompt = page.getByRole('textbox', { name: 'Ask about your paper' });
+  await prompt.fill('Preserve my terminology.');
+  await guidance.getByRole('button', { name: 'Ask agent to fix', exact: true }).click();
+  await expect(prompt).toBeFocused();
+  await expect(prompt).toHaveValue(/Preserve my terminology\.\n\nFix the PDF creation problem/);
+  await page.screenshot({ path: resolve('artifacts/loom-pdf-repair.png'), animations: 'disabled' });
+  expect(requestBodies.filter((request) => request.path.endsWith('/prompt'))).toHaveLength(0);
   await guidance.getByRole('button', { name: 'Dismiss PDF guidance' }).click();
   await expect(guidance).toBeHidden();
+  await prompt.fill('Keep settings draft.');
+  await page.locator('.build-status').click();
+  const pdfSettings = page.getByRole('dialog', { name: 'PDF settings', exact: true });
+  await pdfSettings.getByRole('button', { name: 'Ask agent to fix', exact: true }).click();
+  await expect(pdfSettings).toBeHidden();
+  await expect(prompt).toBeFocused();
+  await expect(prompt).toHaveValue(/Keep settings draft\.\n\nFix the PDF creation problem/);
   await connect();
   await page.getByRole('textbox', { name: 'Ask about your paper' }).fill('fix this error');
   await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
@@ -1772,7 +1808,67 @@ test('fix this error receives dismissed build diagnostics and source context wit
   ).toBe(true);
   expect(text).not.toContain('fixture-password');
   await expect(page.getByText('Permission needed: edit', { exact: true })).toBeVisible();
+  await page.locator('.build-status').click();
+  await expect(
+    pdfSettings.getByRole('button', { name: 'Ask agent to fix', exact: true }),
+  ).toBeDisabled();
 });
+
+for (const status of [404, 503] as const) {
+  test(`saved chat restore ${status} offers recovery without losing history or resending`, async () => {
+    await connect();
+    const prompt = page.getByRole('textbox', { name: 'Ask about your paper' });
+    await prompt.fill('Show markdown rendering.');
+    await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Research update', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Send to agent', exact: true })).toBeVisible();
+    await prompt.fill('Keep this unsent follow-up.');
+    await page.getByRole('button', { name: 'Agent connections', exact: true }).click();
+    const connections = page.getByRole('dialog', { name: 'Agent connections', exact: true });
+    await connections.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await connections.getByRole('button', { name: 'Close dialog', exact: true }).click();
+    sessionLookupFailure = status;
+    await connect();
+    await expect(page.locator('.agent-composer-status [role="status"]')).toHaveText(
+      'Conversation needs recovery',
+    );
+    await expect(prompt).toHaveValue('Keep this unsent follow-up.');
+    await expect(page.getByRole('button', { name: 'Send to agent', exact: true })).toBeDisabled();
+    if (!(await page.locator('.agent-conversation').isVisible()))
+      await page.getByRole('button', { name: 'Show conversation', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Research update', exact: true })).toBeVisible();
+    await dimensions(720, 540);
+    const recovery = page.getByRole('button', {
+      name: status === 404 ? 'Continue conversation' : 'Retry conversation',
+      exact: true,
+    });
+    await expect(recovery).toBeInViewport();
+    await page.screenshot({
+      path: resolve(`artifacts/loom-chat-recovery-${status}.png`),
+      animations: 'disabled',
+    });
+    if (status === 503) sessionLookupFailure = null;
+    await recovery.click();
+    await expect(page.locator('.agent-composer-status [role="status"]')).toHaveText(
+      'Agent connected',
+    );
+    await expect(page.getByRole('button', { name: 'Send to agent', exact: true })).toBeEnabled();
+    expect(Object.keys(sessions)).toHaveLength(status === 404 ? 2 : 1);
+    expect(requestBodies.filter((request) => request.path.endsWith('/prompt'))).toHaveLength(1);
+    await expect(prompt).toHaveValue('Keep this unsent follow-up.');
+    if (status === 404) {
+      await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
+      await expect
+        .poll(() => requestBodies.filter((request) => request.path.endsWith('/prompt')).length)
+        .toBe(2);
+      const submission = requestBodies
+        .filter((request) => request.path.endsWith('/prompt'))
+        .at(-1)!;
+      expect(String(submission.body.text)).toContain('Earlier public conversation context');
+      expect(String(submission.body.text)).toContain('Show markdown rendering.');
+    }
+  });
+}
 
 test('new conversation remains available while disconnected and continues after connecting', async () => {
   await connect();

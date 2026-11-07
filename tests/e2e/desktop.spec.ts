@@ -864,9 +864,16 @@ test('file operations, root choice, search locations, find/replace and caret res
   await expect(
     page.getByRole('button', { name: 'sections/results.tex', exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Actions for sections/results.tex', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('button', { name: 'Project file options', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Delete selected file', exact: true }).click();
+  const deletion = page.getByRole('dialog', { name: 'Delete file', exact: true });
+  await expect(deletion).toContainText('sections/results.tex');
+  await expect(deletion.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await deletion.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await readFile(join(folder, 'sections/results.tex'), 'utf8')).toBe('');
+  await page.getByRole('button', { name: 'Project file options', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Delete selected file', exact: true }).click();
+  await deletion.getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByRole('button', { name: 'Project file options', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Deleted files (1)', exact: true }).click();
   await page.getByRole('button', { name: 'Restore sections/results.tex' }).click();

@@ -2366,6 +2366,9 @@ kbd {
   font-size: 12px;
   line-height: 1.5;
 }
+.agent-inline-error.agent-recovery {
+  color: var(--text-muted);
+}
 .agent-draft-attachments {
   display: flex;
   flex: 0 0 auto;
@@ -3111,6 +3114,25 @@ dialog:has(.agent-image-expanded-canvas) {
   flex-shrink: 0;
   background: var(--text-primary);
   border-radius: var(--radius-pill);
+}
+.agent-activity.is-working::before {
+  animation: agent-working-pulse 1.8s ease-in-out infinite;
+}
+@keyframes agent-working-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-activity.is-working::before {
+    animation: none;
+  }
 }
 .agent-workspace-panel .composer-area {
   padding: 8px;
