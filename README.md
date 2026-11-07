@@ -58,6 +58,10 @@ This downloads a user-local TinyTeX distribution and TexLab under your home dire
 
 For candidate installation, checksum verification, backup, and manual upgrades, see the [Linux installation guide](docs/releases/linux/install.md). The [release checklist](docs/releases/linux/README.md) distinguishes verified results from outstanding stable-release gates.
 
+## Releases
+
+[Loom Linux 0.1.0 Beta](https://github.com/monabji/loom/releases/tag/v0.1.0-beta.1) is a prerelease for Linux x86_64. It has been exercised on an Omarchy host; clean Ubuntu GNOME Wayland/X11 and desktop integration remain unverified. See the [Linux release checklist](docs/releases/linux/README.md) for evidence and known limitations.
+
 ## Development
 
 ```sh
