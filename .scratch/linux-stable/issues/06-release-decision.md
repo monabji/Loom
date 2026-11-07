@@ -6,7 +6,11 @@
 
 **Blocked by:** 05
 
-**Status:** in-progress
+**Status:** blocked
 
-- [ ] Independent review covers standards and specification, with all high-risk findings resolved.
-- [ ] Record dependency review, one retrospective, artifact checksum, remaining blockers, and ready/not-ready decision.
+- [x] Independent review covers standards and specification, with all high-risk findings resolved.
+- [x] Record dependency review, one retrospective, artifact checksum, remaining blockers, and ready/not-ready decision.
+
+## Decision
+
+Local review and the retrospective are complete. NOT READY is recorded in the canonical checklist. Stable sign-off remains blocked by ticket 05 and its clean-environment/live-integration evidence.

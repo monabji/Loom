@@ -8,9 +8,9 @@
 
 **Status:** blocked
 
-- [ ] Run real TeX and synthetic profile upgrade checks; distinguish live agents from fixture checks.
+- [x] Run real TeX and synthetic profile upgrade checks; distinguish live agents from fixture checks.
 - [ ] Ubuntu 24.04 Wayland and X11 pass exact AppImage journeys, native launch, and desktop integration.
 
 ## Blocker
 
-Clean Ubuntu 24.04 GNOME Wayland and X11 environments are unavailable. Mounted host checks and partial upgrade proof are in progress. Live native integrations and desktop integration remain unverified.
+Clean Ubuntu 24.04 GNOME Wayland and X11 environments are unavailable. Mounted host checks and all three synthetic upgrade journeys passed. Live native integrations and desktop integration remain unverified.
