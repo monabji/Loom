@@ -42,6 +42,10 @@ For a focused test, use the underlying runner, for example `npx vitest run tests
 
 ## Open a pull request
 
+Open contribution pull requests against the `staging` branch, not `main`. GitHub defaults new pull requests to `main`, so change the base branch to `staging` in the pull request form before submitting. The `staging` branch is for integrating and checking contributions; `main` remains the stable default branch.
+
+GitHub's Contributors graph is based on commits in the default branch (`main`). Commits merged into `staging` do not appear there unless they are later brought into `main`.
+
 Describe the problem, the change, and how you tested it. Include screenshots for visible UI changes and note any platform or external-service checks you could not run. Link a related issue when there is one.
 
 By contributing, you confirm that you have the right to submit your work under the repository's [MIT License](LICENSE). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
