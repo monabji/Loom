@@ -81,6 +81,13 @@
       ],
       "category": "Office",
       "executableName": "loom",
+      "executableArgs": [],
+      "extraFiles": [
+        {
+          "from": "scripts/linux-app-run.sh",
+          "to": "AppRun"
+        }
+      ],
       "syncDesktopName": true
     },
     "extraResources": [
