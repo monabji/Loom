@@ -2295,8 +2295,19 @@ test('authorized live native agent creates LaTeX files, compiles and safely reve
   const limit = Date.now() + 110_000;
   let approvedPermissions = 0;
   while (Date.now() < limit) {
-    const permission = page.getByRole('button', { name: 'Allow once', exact: true });
-    if (await permission.isVisible()) {
+    const requestHeadings = page.getByRole('heading', { name: /^Permission needed:/ });
+    for (let index = (await requestHeadings.count()) - 1; index >= 0; index -= 1) {
+      const request = requestHeadings.nth(index).locator('..');
+      if (!(await request.isVisible())) continue;
+      await expect(request).toContainText(/main\.tex|sections\/notes\.tex/);
+      if (approvedPermissions === 0) {
+        expect(await readFile(join(root, 'main.tex'), 'utf8')).toBe(source);
+        await expect(readFile(join(root, 'sections/notes.tex'))).rejects.toMatchObject({
+          code: 'ENOENT',
+        });
+      }
+      const permission = request.getByRole('button', { name: 'Allow once', exact: true });
+      if (!(await permission.isEnabled())) continue;
       approvedPermissions += 1;
       await permission.click();
     }

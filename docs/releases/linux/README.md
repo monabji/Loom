@@ -24,22 +24,29 @@ The [specification](../../../.scratch/linux-stable/spec.md) defines the scope an
 
 `release/Loom-0.1.0.AppImage`, with `release/Loom-0.1.0.AppImage.sha256`.
 
-SHA-256: `644edd4be3ceb4fe3c7f35c92f5419b24f5bef6cbd9c4c149e78063ee3e5038e`.
+SHA-256: `050664bfec7130928fb5c8eb01c5a584198a09067dc96cffcfb24822e055cd47`.
 
-The final rebuild adds distribution notices. Its `app.asar` is byte-identical to the fully tested build. Two native smoke journeys passed against this exact final AppImage. The complete 89-test behavior pass is associated with the earlier checksum below, rather than falsely attributed to the final notice-only checksum.
+This candidate includes the Codex permission-path disclosure fix. The exact AppImage passed the mounted Electron behavior suite, all three saved-data upgrade journeys, native reconnect checks, and separate supervised live Codex and OpenCode edit/compile/revert journeys. It remains a 0.1.0 candidate, not a stable release.
 
 ## Evidence index
 
 - `artifacts/linux-release/baseline/`: original `npm run check` passed with 256 tests and 32 skips; source Electron suite passed with 77 tests and 17 skips. This includes the missing-tool behavior case excluded by the real-TeX run.
-- `artifacts/linux-release/final/`: post-review standard check passed with 266 unit tests and 32 skips; checksum tamper test passed; mounted AppImage with real TeX passed 89 Electron tests with 8 skips; all 3 tagged upgrade journeys passed. Full-behavior AppImage SHA-256 is `28cdd8f4db81b342619dcb02539539b31bf37805e84779dd62224ccb975e6077`. That image and its extraction are retained.
-- `artifacts/linux-release/notices/`: final packaging, checksum verification, extracted launcher/desktop/notices guard, byte-identical application-archive proof, 2 native smoke tests, and `manifest.json` identifying the exact artifact and evidence classes.
+- `artifacts/linux-release/post-codex-path-fix-check.log`: full `npm run check` after the permission-path fix.
+- `artifacts/linux-release/post-codex-path-fix-appimage-e2e.log`: exact-candidate mounted suite with real TeX; 89 passed, 8 skipped. Candidate SHA-256 is `050664bfec7130928fb5c8eb01c5a584198a09067dc96cffcfb24822e055cd47`.
+- `artifacts/linux-release/post-codex-path-fix-upgrades.log`: all 3 tagged old-to-new saved-data journeys passed.
+- `artifacts/linux-release/post-codex-path-fix-reconnect.log`: both providers passed reconnect/disconnect checks on the exact candidate.
+- `artifacts/linux-release/post-codex-path-fix-live-codex-final.log` and `post-codex-path-fix-live-opencode-final.log`: separate live supervised provider journeys passed; the tests verify requested file paths are visible before approval and source is unchanged until approval.
+- `artifacts/linux-release/post-codex-path-fix-checksum.log` and `post-codex-path-fix-appdir-guard.log`: checksum and extracted launcher/desktop/notices checks passed for the candidate.
+- `artifacts/linux-release/pre-codex-permission-details/`: retained previous candidate and extraction used as the upgrade source.
+- `artifacts/linux-release/final/`: earlier post-review behavior and upgrade evidence, associated with earlier artifact bytes; retained as history.
+- `artifacts/linux-release/notices/`: earlier packaging, checksum, launcher/desktop/notices guard, and manifest evidence.
 - `artifacts/linux-release/upgrade/`: old and candidate application/executable hashes, selector red/green probe, retained chat text without resubmission, source/preferences/library checks, conflict recovery after binary replacement, and future-version refusal preserving source and logical metadata.
 - `artifacts/linux-release/version/`: temporary `0.1.1-release-probe` failed before the version fix and passed afterward. Package metadata was restored byte-for-byte. Focused contract/agent checks, build, formatter, and typecheck passed.
 - `artifacts/linux-release/ux-audit.md` and `screenshots/`: observed onboarding, narrow-window, keyboard, PDF guidance, and recovery evidence. Runtime identity and visual tokens are preserved. The feature map lives at `.agents/skills/verify-loom/features/README.md`.
 - `artifacts/linux-release/premium-audit.json` and `premium-audit-final.json`: strict static product audits; runtime usability evidence remains separate.
 - `artifacts/linux-release/production-audit.json`: zero reported production vulnerabilities. `baseline/npm-audit.json` reports six moderate build-tool package findings and no high/critical findings. `build-audit-high-gate.json` passes the high-severity gate. `electron-advisories.json` retains the official published-advisory query and version-range assessment.
 - `artifacts/linux-release/standards-review.md`, `spec-review.md`, `followup-review-result.txt`, and `final-review.md`: independent Sol reviews. Initial upgrade/procedure objections are resolved. The final reviewer left packaging evidence pending; the completed `notices/` evidence closes those local items. Cross-family review was excluded by the model policy.
-- `artifacts/linux-release/resume-native-reconnect.log`, `resume-live-codex.log`, `resume-live-codex-retry.log`, `resume-live-opencode.log`, `resume-live-opencode-service.log`, `resume-live-opencode-diagnostic.log`, `resume-supervised-codex.log`, and `resume-supervised-opencode.log`: current-host native provider evidence against the exact candidate. Both providers passed reconnect and supervised edit, PDF, and revert journeys. The first OpenCode desktop run timed out after its first file write; two focused reruns passed. The live test now accepts the toolbar's Create PDF or Update PDF label and requires an observed Allow once approval.
+- `artifacts/linux-release/post-codex-path-fix-*`: final exact-candidate checks after the Codex path-disclosure fix. Earlier `resume-*` logs belong to the superseded candidate and are retained as historical evidence.
 - `artifacts/linux-release/resume-host-access.md`: current remote workflow, branch, container, and VM access checks. GitHub CLI access is available, but the remote repository has no Linux release workflow and this branch is not on origin.
 - Earlier `integrated/`, native failure logs, and extracted-image proofs remain historical evidence. Initial native mounting failed for missing FUSE components; the successful host run used the recorded local setup.
 
@@ -61,4 +68,4 @@ The existing visual identity is unchanged. Performance work was not selected bec
 
 ## Remaining time
 
-The live provider checks are complete on the host. The remaining work is the clean Ubuntu Wayland/X11 validation, the remote release workflow, and a rebuilt 1.0.0 artifact after those gates pass. Estimate 1–3 working days once those environments and remote execution are available, if the checks pass without fixes. The version remains 0.1.0 until then.
+The live provider checks are complete on the host. The remaining work is clean Ubuntu Wayland/X11 validation, the remote release workflow, refreshed dependency review, and a rebuilt 1.0.0 artifact after those gates pass. Estimate 1–3 working days once those environments and remote execution are available, if checks pass without fixes. The version remains 0.1.0 until then.

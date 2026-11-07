@@ -12,19 +12,20 @@ Electron 45.2.1 is pinned. Its [official release notes](https://releases.electro
 
 The inventory found sandboxed, isolated renderers with Node integration disabled; blocked navigation and popups; denied browser permissions; validated IPC; and SQLite WAL with full synchronization. Existing tests exercise these boundaries. The independent release review must inspect the changed test-launch paths to ensure packaged runs retain them.
 
-Review source-import path traversal and size limits, export destinations, symlinks, agent command ownership, permission forwarding, recovery preservation, and log redaction before signing off. Native harness permission enforcement requires live integration evidence. Fixture servers establish only the adapter and UI contract.
+Review source-import path traversal and size limits, export destinations, symlinks, agent command ownership, permission forwarding, recovery preservation, and log redaction before signing off. Fixture servers establish only the adapter and UI contract. Separate live supervised Codex and OpenCode checks now establish host-level permission enforcement; they do not establish enforcement on clean Ubuntu targets.
 
 ## Outstanding evidence
 
 - Final packaged dependency inventory. Production audit is retained and passed.
 - Independent review completed for the changed ZIP and launcher boundaries; review follow-up remains open for upgrade coverage.
-- Live native provider permission/reconnect checks.
 - Clean target sandbox and native launch evidence.
 - Recheck advisories before stable publication. The candidate uses SHA-256 and a trusted distribution channel; no Linux signing identity or automatic updater is included.
 
 ## Defensive changes
 
 ZIP paper imports now exclude `.git` path components, matching folder imports. Nine inert cases exercise root, wrapper, nested, directory, and file entries while preserving ordinary bytes. The generated AppImage desktop entry and AppRun previously disabled sandboxing; packaging now supplies a minimal reviewed launcher, and CI checks the actual extracted files. The Electron boundary test also checks that the no-sandbox switch is absent. Independent Standards and Spec reviewers inspected the changed boundaries and ran inert checks without finding an additional production defect. Their reports are in `artifacts/linux-release/standards-review.md` and `spec-review.md`.
+
+Codex file-change approvals now show validated affected paths from the matching active session and item before the user approves. The adapter keeps paths only, clears them when the item/turn completes, and never forwards file contents into the permission prompt. Adapter tests cover matching, rename destinations, session scoping, malformed/missing data, and unchanged approval replies. The exact-candidate live test asserts that the path is visible and the file has not changed before approval; see `artifacts/linux-release/post-codex-path-fix-live-codex-final.log`.
 
 ## Candidate build-tool exception
 

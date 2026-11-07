@@ -20,11 +20,11 @@ Inspect each test's setup before enabling it. These opt-ins can invoke real prov
 
 - One missing-tool case is intentionally excluded by `LOOM_TEST_TEX=1`. It passed in the default source baseline where TeX opt-in was absent.
 - One authorized-paper case additionally requires `LOOM_PDF_PAPER` to identify an explicit synthetic paper.
-- One live agent creation/compile/revert journey requires `LOOM_AGENT_DESKTOP_LIVE=1` and its chosen native harness. Separate exact-candidate runs passed for Codex and OpenCode on the Omarchy host.
+- One live agent creation/compile/revert journey requires `LOOM_AGENT_DESKTOP_LIVE=1` and its chosen native harness. Separate exact-candidate runs passed for Codex and OpenCode on the Omarchy host after the Codex permission-path fix.
 - Two native reconnect journeys require `LOOM_NATIVE_RECONNECT=1` and installed harnesses. Both passed against the exact candidate on the Omarchy host.
 - Two large synthetic workload journeys require `LOOM_PHASE8_PROJECT` and their packaged/TeX prerequisites. No performance claim or optimization is based on these skipped workloads.
 - One live arXiv journey requires `LOOM_RESEARCH_LIVE=1`, network access, and real TeX. Local reference and Zotero fixture imports run separately.
 
 ## Environment limits
 
-The mounted application ran on the Omarchy developer host with locally supplied FUSE components. A Wayland desktop with X11 variables does not establish whether Electron used native Wayland or XWayland. Live Codex and OpenCode supervised permission, edit, PDF, revert, reconnect, and disconnect checks passed on this host. Clean Ubuntu GNOME Wayland and X11 and native desktop integration on those targets remain unverified. The first OpenCode desktop inference attempt timed out after a file write; two later runs passed, so model latency varied during this check.
+The mounted application ran on the Omarchy developer host with locally supplied FUSE components. A Wayland desktop with X11 variables does not establish whether Electron used native Wayland or XWayland. Live Codex and OpenCode supervised permission, edit, PDF, revert, reconnect, and disconnect checks passed on this host. The Codex check verifies affected paths are shown before approval and that source remains unchanged before the user approves. Clean Ubuntu GNOME Wayland and X11 and native desktop integration on those targets remain unverified. Earlier OpenCode runs had one timeout and two selector failures while the test was being hardened; the final exact-candidate run passed.
