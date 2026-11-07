@@ -8,11 +8,11 @@ The canonical specification is [the release spec](../../../.scratch/linux-stable
 
 - [x] Inventory existing workflows, tests, packaging, and recovery boundaries.
 - [x] Define candidate Linux targets, scope, acceptance criteria, and dependent tickets.
-- [ ] Run baseline and integrated standard checks. Baseline passes; integrated run pending.
+- [x] Run baseline and integrated standard checks. First integration passes; final post-review build is pending.
 - [x] Prove the project verification skill using existing Electron tests. Extracted candidate project startup passed.
 - [x] Audit complete journeys, keyboard, small windows, failures, and recovery on the developer host. See `artifacts/linux-release/ux-audit.md`; clean desktop integration remains open.
 - [x] Wire packaged checks, checksum generation, and artifact-only release automation. The remote workflow has not been executed.
-- [ ] Review dependencies and security boundaries.
+- [x] Review dependencies and changed security boundaries. Production audit and published Electron ranges checked; moderate build-tool candidate exception recorded.
 - [ ] Verify current and upgraded synthetic data with the packaged candidate.
 - [ ] Verify exact AppImage on clean Ubuntu 24.04 GNOME Wayland and X11.
 - [ ] Review integrated changes independently and run one retrospective.
@@ -25,6 +25,9 @@ The canonical specification is [the release spec](../../../.scratch/linux-stable
 - Extracted pre-fix AppImage: `project-manager-proof.log` passes one startup/create/save/reopen journey; `latex-proof.log` passes 10 real TeX journeys with two explicit skips. These results predate the launcher fix.
 - Native pre-fix AppImage launch: `native-appimage-proof.log` fails with missing `libfuse.so.2`; failure trace retained in `native-failure/`.
 - Production audit: `artifacts/linux-release/production-audit.json`, zero reported vulnerabilities. Full audit reports six moderate build-tool findings.
+- First integrated mounted AppImage: `artifacts/linux-release/integrated/`, standard checks pass (266 unit tests, 32 skips), 89 Electron tests pass with 8 explicit skips. SHA-256 `968dbc5d671c9a0cfe95cf3f1b530e19c6ecb7747808869787cad4b2bb7cd184`. This artifact is retained inside that evidence directory.
+- Expanded upgrade evidence: `artifacts/linux-release/upgrade/`, three existing tagged journeys pass across the previous and candidate extracted builds. Source, preferences, library, chat text, and conflicting recovery are compared. Future-version refusal preserves source and logical metadata in the unit test.
+- Version probe: `artifacts/linux-release/version/`, temporary `0.1.1-release-probe` fails before the runtime fix and passes after it. Package metadata was restored byte-for-byte.
 - Launcher regression: `launcher-red.log`, `launcher-green.log`, and `launcher-typecheck.log`. Generated upstream launcher disabled sandboxing; custom launcher preserves flags and failure status. Final packaged proof pending.
 - Candidate artifact: `release/Loom-0.1.0.AppImage`, local pre-stable diagnostic build. Rebuild and checksum refresh required after integration.
 - Clean environments: unverified. Host is Omarchy 4.0.4 x86_64. Docker socket access is denied; no clean Ubuntu run has occurred.
@@ -37,10 +40,16 @@ The canonical specification is [the release spec](../../../.scratch/linux-stable
 - SHA-256 generation and tamper verification are automated. The manual CI workflow builds and retains candidates without publishing a release.
 - Installation, backup, replacement, known gaps, and verification guidance are documented.
 
+- Runtime status and agent handshake versions now derive from package metadata, verified with an isolated version-change probe.
+
+## Known gaps
+
+Clean Ubuntu GNOME Wayland and X11, native desktop launcher/picker/Trash recovery behavior on those targets, live native Codex/OpenCode enforcement, and execution of the remote release workflow remain unverified. Host mounting needed locally supplied FUSE components. Ubuntu security-policy compatibility must be tested with sandboxing retained; no global policy bypass is accepted.
+
 ## Current decision
 
 NOT READY. Mandatory packaged, clean-environment, upgrade, and integration evidence is incomplete.
 
 ## Estimate
 
-Initial estimate: 2–4 hours of local preparation. Clean-machine and live-provider completion has no reliable ETA until suitable infrastructure is available. Update this estimate at evidence checkpoints.
+Post-review local preparation: 15–30 minutes estimated remaining for the final build, targeted upgrades, mounted suite, review, and retrospective. Clean-machine and live-provider completion has no reliable ETA until suitable infrastructure is available.

@@ -23,6 +23,8 @@ Use `features/README.md` to select the suites. For the initial proof, the projec
 
 Run `npm run test:e2e` for the fixture baseline. Run real TeX separately with `LOOM_TEST_TEX=1 npx playwright test tests/e2e/latex.spec.ts`; the toolchain must already be installed and discoverable. Live providers require separate explicit opt-ins and authorized accounts. Never equate fixture servers with live provider evidence.
 
+For binary replacement, set `LOOM_E2E_UPGRADE_FROM` to the previous executable and `LOOM_E2E_EXECUTABLE` to the candidate, then run `npx playwright test tests/e2e/project-manager.spec.ts tests/e2e/agent.spec.ts tests/e2e/desktop.spec.ts --grep @upgrade`. Only tagged journeys seed with the old binary. Retain both application archive hashes as well as executable hashes; Electron executable bytes can be identical across Loom builds.
+
 ## Evidence
 
 Save commands, exit codes, environment, counts including skips, and complete logs under `artifacts/linux-release/`. The runner retains failure traces in `test-results/`; copy relevant traces into the release evidence directory before another run replaces them. Preserve screenshots under their suite-defined artifact paths. Check resulting source, exported bytes, retained recovery, and reopened UI state. A source run, an unpacked executable run, an extracted AppImage run, and a native mounted AppImage run are distinct evidence classes.
