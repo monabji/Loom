@@ -6,7 +6,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] Independent review covers standards and specification, with all high-risk findings resolved.
 - [ ] Record dependency review, one retrospective, artifact checksum, remaining blockers, and ready/not-ready decision.

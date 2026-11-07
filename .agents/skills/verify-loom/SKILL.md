@@ -11,7 +11,7 @@ Read `docs/releases/linux/README.md` for the release gates and evidence index. T
 
 From the repository root, run `npm ci` when dependencies are absent, then `npm run build`. In a graphical Linux session, run `npx playwright test tests/e2e/project-manager.spec.ts --grep "startup library creates"`. Each test launches Electron with a temporary `--user-data-dir`, waits for the library or service ready state, and closes the owned application in teardown. Never point tests at a personal profile or manuscript.
 
-For packaged verification, build with `npm run package:appimage -- --publish never`. This appends the no-publication flag to the existing builder invocation. Set `LOOM_E2E_EXECUTABLE` to an absolute executable path before invoking Playwright. All required suites must honor that selector. Until that change is integrated, desktop, Git, and some agent suites still launch the source build. Do not label a mixed run packaged.
+For packaged verification, build with `npm run package:appimage -- --publish never`. This appends the no-publication flag to the existing builder invocation. Set `LOOM_E2E_EXECUTABLE` to an absolute executable path before invoking Playwright. All required suites must honor that selector. The shared `electronLaunchOptions` helper selects the supplied executable for every suite. Legacy `LOOM_AGENT_PACKAGED=1` remains supported. Do not label a run packaged unless the selected executable and checksum are recorded.
 
 ## Doctor
 
@@ -35,4 +35,4 @@ Allow test teardown to close only the Electron processes and temporary projects 
 
 ## Helpers
 
-The existing Playwright runner and `tests/e2e/helpers/project-library.ts` own launch journeys and project resumption. No extra driver is needed. Use the release workflow and checksum script when integrated. Maintain this feature map with `pstack:maintain-verification-skill` when product flows change.
+The existing Playwright runner and `tests/e2e/helpers/project-library.ts` own launch journeys and project resumption. No extra driver is needed. Use `npm run linux:checksum -- release/Loom-0.1.0.AppImage` and `npm run linux:verify-checksum -- release/Loom-0.1.0.AppImage`. After extraction, run `node scripts/linux-release-verify-appdir.mjs <extracted-root>` to check the shipped launcher. Maintain this feature map with `pstack:maintain-verification-skill` when product flows change.
