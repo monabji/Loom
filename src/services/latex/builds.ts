@@ -100,6 +100,9 @@ export class BuildService {
       JSON.stringify({ current: session.state.current, retained: session.retained }),
     );
   }
+  active(): boolean {
+    return [...this.sessions.values()].some((session) => !!(session.task || session.pending));
+  }
   async status(projectId: string, detect = false): Promise<BuildState> {
     await this.detect(detect);
     return structuredClone(this.session(projectId).state);

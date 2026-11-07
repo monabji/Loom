@@ -1,6 +1,6 @@
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtemp, readFile, rm, access } from 'node:fs/promises';
+import { tmpdir, homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 let app: ElectronApplication;
 let page: Page;
@@ -56,8 +56,13 @@ async function library() {
   await page.getByRole('button', { name: 'Back to projects', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your projects', exact: true })).toBeVisible();
 }
-test.beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'loom-manager-'));
+test.beforeEach(async ({}, testInfo) => {
+  dir = await mkdtemp(
+    join(
+      testInfo.title.includes('project menu confirms Trash') ? homedir() : tmpdir(),
+      '.loom-manager-',
+    ),
+  );
   await launch();
   await size(1440, 900);
 });
@@ -277,4 +282,102 @@ test('visible back navigation animates both ways, preserves the live workspace a
   await resume.click();
   await expect(editor).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Your projects', exact: true })).not.toBeVisible();
+});
+
+test('project menu confirms Trash, retains failures, protects active paper and preserves siblings', async () => {
+  await create('Trash paper');
+  await library();
+  await create('Sibling paper');
+  await library();
+  await page.getByRole('button', { name: 'Options for Sibling paper', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: /This folder is open/ })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Options for Trash paper', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move project to Trash', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Move project to Trash?', exact: true });
+  await expect(confirmation).toContainText('Trash paper');
+  await expect(confirmation).toContainText(join(dir, 'Trash paper'));
+  await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await access(join(dir, 'Trash paper', 'main.tex'));
+  await expect(page.getByRole('button', { name: 'Open Trash paper', exact: true })).toBeVisible();
+  await app.evaluate(({ shell }) => {
+    const state = globalThis as typeof globalThis & { originalTrash: typeof shell.trashItem };
+    state.originalTrash = shell.trashItem;
+    shell.trashItem = async () => {
+      throw new Error('Injected native Trash failure');
+    };
+  });
+  await page.getByRole('button', { name: 'Options for Trash paper', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move project to Trash', exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Move to Trash', exact: true }).click();
+  await expect(confirmation.getByRole('alert')).toContainText('retained');
+  await access(join(dir, 'Trash paper', 'main.tex'));
+  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await app.evaluate(({ shell }) => {
+    shell.trashItem = (
+      globalThis as typeof globalThis & { originalTrash: typeof shell.trashItem }
+    ).originalTrash;
+  });
+  await page.getByRole('button', { name: 'Options for Trash paper', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move project to Trash', exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Move to Trash', exact: true }).click();
+  await expect(confirmation).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Trash paper', exact: true })).toHaveCount(0);
+  await expect(access(join(dir, 'Trash paper'))).rejects.toThrow();
+  expect(await readFile(join(dir, 'Sibling paper', 'main.tex'), 'utf8')).toContain('documentclass');
+  await page.getByRole('button', { name: 'Return to workspace', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).toBeVisible();
+});
+
+test('unavailable closed project offers list removal with cancellation', async () => {
+  await create('Unavailable paper');
+  await library();
+  await create('Current paper');
+  await library();
+  await rm(join(dir, 'Unavailable paper'), { recursive: true });
+  await page.getByRole('button', { name: 'Refresh projects', exact: true }).click();
+  await page.getByRole('button', { name: 'Options for Unavailable paper', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Remove from list', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Remove project from list?', exact: true });
+  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Open Unavailable paper', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Options for Unavailable paper', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Remove from list', exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Remove from list', exact: true }).click();
+  await expect(confirmation).not.toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Open Unavailable paper', exact: true }),
+  ).toHaveCount(0);
+});
+
+test('native close releases the last project and rejects stale project identities', async () => {
+  await create('Only project');
+  await library();
+  const result = await page.evaluate(async () => {
+    const current = await window.loom!.project({ type: 'current' });
+    if (!current.ok || !current.value) throw new Error('No current project');
+    const blocked = await window.loom!.project({
+      type: 'trash-project',
+      projectId: current.value.id,
+    });
+    const stale = await window.loom!.project({ type: 'close-project', projectId: 'stale' });
+    const closed = await window.loom!.project({
+      type: 'close-project',
+      projectId: current.value.id,
+    });
+    return { blocked, stale, closed };
+  });
+  expect(result.blocked.ok).toBe(false);
+  expect(result.stale.ok).toBe(false);
+  expect(result.closed).toMatchObject({ ok: true, value: null });
+  await page.getByRole('button', { name: 'Refresh projects', exact: true }).click();
+  await page.getByRole('button', { name: 'Options for Only project', exact: true }).click();
+  await expect(
+    page.getByRole('menuitem', { name: 'Move project to Trash', exact: true }),
+  ).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await access(join(dir, 'Only project', 'main.tex'));
 });

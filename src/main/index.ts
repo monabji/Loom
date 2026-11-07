@@ -42,26 +42,30 @@ import { promises as fs } from 'node:fs';
 let window: BrowserWindow | undefined;
 let closeAllowed = false;
 let crashRecoveries = 0;
-const service = new ServiceController(() => {
-  const child = utilityProcess.fork(join(__dirname, 'service.cjs'), [app.getPath('userData')], {
-    serviceName: 'Loom local services',
-  });
-  return {
-    postMessage: (message) => child.postMessage(message),
-    onMessage: (listener) => {
-      child.on('message', listener);
-    },
-    onExit: (listener) => {
-      child.once('exit', listener);
-    },
-    onError: (listener) => {
-      child.once('error', listener);
-    },
-    kill: () => {
-      child.kill();
-    },
-  };
-});
+const service = new ServiceController(
+  () => {
+    const child = utilityProcess.fork(join(__dirname, 'service.cjs'), [app.getPath('userData')], {
+      serviceName: 'Loom local services',
+    });
+    return {
+      postMessage: (message) => child.postMessage(message),
+      onMessage: (listener) => {
+        child.on('message', listener);
+      },
+      onExit: (listener) => {
+        child.once('exit', listener);
+      },
+      onError: (listener) => {
+        child.once('error', listener);
+      },
+      kill: () => {
+        child.kill();
+      },
+    };
+  },
+  5_000,
+  (path) => shell.trashItem(path),
+);
 
 const rendererFile = join(__dirname, '../renderer/index.html');
 const rendererUrl = process.env.ELECTRON_RENDERER_URL || pathToFileURL(rendererFile).href;

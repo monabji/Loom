@@ -46,6 +46,11 @@ export class MetadataStore {
       )
       .all() as Array<{ path: string; id: string; name: string; lastOpened: number }>;
   }
+  forgetProject(path: string): void {
+    this.db.prepare('DELETE FROM project_library WHERE path=?').run(path);
+    if (this.get('lastProject') === path)
+      this.db.prepare('DELETE FROM preferences WHERE key=?').run('lastProject');
+  }
   index(project: string, files: Array<{ id: string; path: string; content: string }>): void {
     const rows = this.db
       .prepare('SELECT id,path,content FROM file_index WHERE project=?')

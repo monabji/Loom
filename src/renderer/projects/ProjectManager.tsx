@@ -3,13 +3,14 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-j
 import type { ProjectChoice, RecentProject } from '../../contracts/project';
 import { ActionMenu } from '../ui/ActionMenu';
 import { Icon } from '../ui/Icon';
-import { EmptyState, IconButton } from '../ui/primitives';
+import { EmptyState, IconButton, Modal } from '../ui/primitives';
 
 export function ProjectManager(props: {
   pending: boolean;
   error: string;
   current?: string;
   onContinue: () => void;
+  onCloseProject?: () => Promise<void>;
   onChoose: (choice: ProjectChoice) => void;
   onOpen: (id: string) => Promise<void>;
   onAppearance: () => void;
@@ -21,6 +22,10 @@ export function ProjectManager(props: {
   const [entries, setEntries] = createSignal<RecentProject[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal('');
+  const [removal, setRemoval] = createSignal<RecentProject | null>(null);
+  const [removing, setRemoving] = createSignal(false);
+  const [removalError, setRemovalError] = createSignal('');
+  const busy = () => props.pending || removing();
   const [query, setQuery] = createSignal('');
   const [view, setView] = createSignal<'list' | 'grid'>('list');
   const [sort, setSort] = createSignal<'recent' | 'name'>('recent');
@@ -64,6 +69,28 @@ export function ProjectManager(props: {
       unsubscribe?.();
     });
   });
+  const remove = async () => {
+    const entry = removal();
+    if (!entry || removing()) return;
+    setRemoving(true);
+    setRemovalError('');
+    try {
+      const result = await window.loom!.project({
+        type: entry.available ? 'trash-project' : 'forget-project',
+        projectId: entry.id,
+      });
+      if (!result.ok) setRemovalError(result.error.message);
+      else {
+        setEntries(result.library ?? []);
+        setRemoval(null);
+        document.getElementById('library-heading')?.focus();
+      }
+    } catch {
+      setRemovalError('Project removal was interrupted. Refresh the library before retrying.');
+    } finally {
+      setRemoving(false);
+    }
+  };
   const setMode = (mode: 'list' | 'grid') => {
     setView(mode);
     try {
@@ -102,10 +129,11 @@ export function ProjectManager(props: {
           <p class="muted">On this device</p>
           <button
             class="library-nav"
+            disabled={busy()}
             aria-current="page"
             onClick={() => {
               setQuery('');
-              void refresh();
+              if (!busy()) void refresh();
             }}
           >
             <Icon name="folder" />
@@ -119,14 +147,12 @@ export function ProjectManager(props: {
           </div>
         </div>
         <div class="library-settings">
-          <button onClick={props.onMore}>Project options</button>
+          <button disabled={busy()} onClick={props.onMore}>
+            Project options
+          </button>
         </div>
       </aside>
-      <main
-        class="library-main"
-        aria-labelledby="library-heading"
-        aria-busy={loading() || props.pending}
-      >
+      <main class="library-main" aria-labelledby="library-heading" aria-busy={loading() || busy()}>
         <header class="library-toolbar">
           <h1 id="library-heading" tabIndex={-1}>
             Your projects
@@ -161,7 +187,7 @@ export function ProjectManager(props: {
             </div>
             <button
               class="secondary-button library-open"
-              disabled={props.pending}
+              disabled={busy()}
               onClick={() => props.onChoose('open')}
             >
               <Icon name="folder" size={18} />
@@ -170,7 +196,7 @@ export function ProjectManager(props: {
             <ActionMenu
               label="Import project"
               icon="download"
-              disabled={props.pending}
+              disabled={busy()}
               actions={[
                 {
                   label: 'Import folder',
@@ -182,7 +208,7 @@ export function ProjectManager(props: {
             />
             <button
               class="primary-button library-new"
-              disabled={props.pending}
+              disabled={busy()}
               onClick={() => props.onChoose('create')}
             >
               <Icon name="plus" size={19} />
@@ -210,14 +236,18 @@ export function ProjectManager(props: {
           <IconButton
             label="Refresh projects"
             icon="refresh"
-            disabled={loading() || props.pending}
+            disabled={loading() || busy()}
             onClick={() => void refresh()}
           />
         </div>
         <Show when={error() || props.error}>
           <div class="library-error" role="alert">
             {error() || props.error}
-            <button class="text-button" disabled={loading()} onClick={() => void refresh()}>
+            <button
+              class="text-button"
+              disabled={loading() || busy()}
+              onClick={() => void refresh()}
+            >
               Refresh library
             </button>
           </div>
@@ -225,10 +255,29 @@ export function ProjectManager(props: {
         <Show when={props.current}>
           <div class="library-resume">
             <span>{props.current} is open</span>
-            <button class="text-button" disabled={props.pending} onClick={props.onContinue}>
+            <button class="text-button" disabled={busy()} onClick={props.onContinue}>
               Return to workspace
               <Icon name="chevron" size={16} />
             </button>
+            <Show when={props.onCloseProject}>
+              <button
+                class="text-button"
+                disabled={busy()}
+                onClick={() => {
+                  setRemoving(true);
+                  void props.onCloseProject!()
+                    .then(() => refresh())
+                    .catch(() =>
+                      setError(
+                        'Could not close the project. Save changes and stop active work before retrying.',
+                      ),
+                    )
+                    .finally(() => setRemoving(false));
+                }}
+              >
+                Close project
+              </button>
+            </Show>
           </div>
         </Show>
         <div class="library-content">
@@ -239,14 +288,14 @@ export function ProjectManager(props: {
               <div class="button-row">
                 <button
                   class="primary-button"
-                  disabled={props.pending}
+                  disabled={busy()}
                   onClick={() => props.onChoose('create')}
                 >
                   Create project
                 </button>
                 <button
                   class="secondary-button"
-                  disabled={props.pending}
+                  disabled={busy()}
                   onClick={() => props.onChoose('open')}
                 >
                   Open existing project
@@ -254,7 +303,7 @@ export function ProjectManager(props: {
               </div>
               <button
                 class="text-button"
-                disabled={props.pending}
+                disabled={busy()}
                 onClick={() => props.onChoose('sample')}
               >
                 Try a sample paper
@@ -273,10 +322,10 @@ export function ProjectManager(props: {
             <ul class={`library-projects library-${view()}`} aria-label="Saved projects">
               <For each={filtered()}>
                 {(entry) => (
-                  <li>
+                  <li class="library-project-row">
                     <button
                       class="library-project"
-                      disabled={props.pending}
+                      disabled={busy()}
                       onClick={() => void props.onOpen(entry.id)}
                       aria-label={`Open ${entry.name}`}
                     >
@@ -297,6 +346,24 @@ export function ProjectManager(props: {
                       <span class="library-date">{openedDate(entry)}</span>
                       <Icon name="chevron" size={17} />
                     </button>
+                    <ActionMenu
+                      label={`Options for ${entry.name}`}
+                      disabled={busy() || loading()}
+                      actions={[
+                        {
+                          label:
+                            entry.deleteBlockedReason ??
+                            (entry.available ? 'Move project to Trash' : 'Remove from list'),
+                          icon: 'trash',
+                          danger: true,
+                          disabled: !!entry.deleteBlockedReason,
+                          run: () => {
+                            setRemovalError('');
+                            setRemoval(entry);
+                          },
+                        },
+                      ]}
+                    />
                   </li>
                 )}
               </For>
@@ -306,18 +373,67 @@ export function ProjectManager(props: {
         <footer class="library-footer">
           <Icon name="lock" size={14} />
           <span>Local projects · No account required</span>
-          <button class="text-button" onClick={props.onService}>
+          <button class="text-button" disabled={busy()} onClick={props.onService}>
             {props.serviceLabel}
           </button>
-          <IconButton label="Workspace settings" icon="settings" onClick={props.onSettings} />
-          <button class="text-button" onClick={props.onAppearance}>
+          <IconButton
+            disabled={busy()}
+            label="Workspace settings"
+            icon="settings"
+            onClick={props.onSettings}
+          />
+          <button class="text-button" disabled={busy()} onClick={props.onAppearance}>
             Appearance
           </button>
-          <button class="text-button" onClick={props.onMore}>
+          <button class="text-button" disabled={busy()} onClick={props.onMore}>
             More options
           </button>
         </footer>
       </main>
+      <Modal
+        title={removal()?.available ? 'Move project to Trash?' : 'Remove project from list?'}
+        open={!!removal()}
+        onClose={() => {
+          if (!removing()) setRemoval(null);
+        }}
+        initialFocus=".cancel-project-removal"
+        icon="trash"
+      >
+        <Show when={removal()}>
+          {(entry) => (
+            <>
+              <p>
+                <strong>{entry().name}</strong>
+              </p>
+              <p class="library-removal-path">{entry().path}</p>
+              <p>
+                {entry().available
+                  ? 'The entire project folder and all files inside will move to system Trash. You can restore it there, then use Open folder to reopen it. Loom will retain its recovery data.'
+                  : 'This folder is unavailable. Only its library entry will be removed. Loom will retain recovery data; restore the folder and use Open folder to reopen it.'}
+              </p>
+              <Show when={removalError()}>
+                <p role="alert">{removalError()}</p>
+              </Show>
+              <div class="button-row">
+                <button
+                  class="secondary-button cancel-project-removal"
+                  disabled={removing()}
+                  onClick={() => setRemoval(null)}
+                >
+                  Cancel
+                </button>
+                <button class="danger-button" disabled={removing()} onClick={() => void remove()}>
+                  {removing()
+                    ? 'Removing…'
+                    : entry().available
+                      ? 'Move to Trash'
+                      : 'Remove from list'}
+                </button>
+              </div>
+            </>
+          )}
+        </Show>
+      </Modal>
     </div>
   );
 }

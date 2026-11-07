@@ -400,3 +400,28 @@
     animation: none !important;
   }
 }
+
+.library-project-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.library-project-row > .library-project {
+  flex: 1;
+  min-width: 0;
+}
+.library-project-row > .action-menu-trigger {
+  flex-shrink: 0;
+}
+.library-grid .library-project-row {
+  position: relative;
+}
+.library-grid .library-project-row > .action-menu-trigger {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.library-removal-path {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+}

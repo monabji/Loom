@@ -46,6 +46,7 @@ const MAX_FILE = 8 * 1024 * 1024;
 const DIFF_BUDGET = { timeout: 20, maxEditLength: 1000 };
 export class ProjectService {
   onHumanWrite?: (path: string) => void;
+  private uncertainTrash = new Set<string>();
   private root = '';
   private loadedId = '';
   private project: Project | null = null;
@@ -191,6 +192,15 @@ export class ProjectService {
   }
   async open(path: string): Promise<ProjectSnapshot> {
     const root = await fs.realpath(path);
+    if (
+      [...this.uncertainTrash].some(
+        (pending) =>
+          root === pending || root.startsWith(pending + sep) || pending.startsWith(root + sep),
+      )
+    )
+      throw new Error(
+        'System Trash has not confirmed this folder. Restart Loom and inspect its folder and Trash before reopening it.',
+      );
     if (!(await fs.stat(root)).isDirectory()) throw new Error('Choose a project folder.');
     this.persist();
     const previous = {
@@ -239,9 +249,104 @@ export class ProjectService {
         } catch {
           /* Keep missing projects visible. */
         }
-        return { ...entry, available };
+        const deleteBlockedReason = await this.deletionBlock(entry.path);
+        return { ...entry, available, ...(deleteBlockedReason ? { deleteBlockedReason } : {}) };
       }),
     );
+  }
+  async closeProject(projectId: string): Promise<void> {
+    if (!this.project || this.project.id !== projectId)
+      throw new Error('The open project changed.');
+    await this.refresh();
+    if (this.snapshot().files.some((file) => !file.deleted && (file.conflict || !file.saved)))
+      throw new Error('Save your changes and resolve conflicts before closing the project.');
+    this.persist();
+    this.store.db.prepare('DELETE FROM preferences WHERE key=?').run('lastProject');
+    for (const doc of this.documents.values()) doc.destroy();
+    this.documents.clear();
+    this.project = null;
+    this.root = '';
+    this.loadedId = '';
+    this.scanCache.clear();
+    this.indexed = null;
+  }
+  private recoveryText(file: RecordFile): string {
+    const doc = new Y.Doc();
+    try {
+      if (file.state.length) Y.applyUpdate(doc, Uint8Array.from(file.state));
+      return doc.getText('source').toString();
+    } finally {
+      doc.destroy();
+    }
+  }
+  private async deletionBlock(path: string): Promise<string | null> {
+    if (this.uncertainTrash.has(path))
+      return 'System Trash did not reply. Restart Loom and inspect the folder and Trash before retrying.';
+    const active = this.root || this.store.get('lastProject');
+    if (!active) return null;
+    let current = active;
+    try {
+      current = await fs.realpath(active);
+    } catch {
+      // A disconnected active folder still owns its recovery data.
+    }
+    if (current === path || current.startsWith(path + sep))
+      return 'This folder is open or contains the open project. Close the project or open a different project before deleting it.';
+    return null;
+  }
+  async removeProject(
+    projectId: string,
+    mode: 'trash' | 'forget',
+    trash: (path: string) => Promise<void>,
+  ) {
+    const entry = this.store.recentProjects().find((entry) => entry.id === projectId);
+    if (!entry) throw new Error('This project is no longer in the local library.');
+    const blocked = await this.deletionBlock(entry.path);
+    if (blocked) throw new Error(blocked);
+    let stat;
+    try {
+      stat = await fs.lstat(entry.path);
+    } catch (error) {
+      if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? ''))
+        throw new Error('The folder cannot be accessed. Reconnect it before moving it to Trash.');
+    }
+    if (mode === 'forget') {
+      if (stat?.isDirectory() || stat?.isSymbolicLink())
+        throw new Error('This folder is available. Refresh the library before removing it.');
+    } else {
+      if (!stat?.isDirectory())
+        throw new Error(
+          'The folder is unavailable. Refresh the library to remove it from the list.',
+        );
+      const canonical = await fs.realpath(entry.path);
+      if (canonical !== entry.path || dirname(canonical) === canonical)
+        throw new Error('The project folder changed or is not safe to move to Trash.');
+      if (
+        this.store.db.location() &&
+        resolve(this.store.db.location()!).startsWith(canonical + sep)
+      )
+        throw new Error('This folder contains Loom recovery data and cannot be moved to Trash.');
+      const recovery = this.store.load(entry.path);
+      if (recovery) {
+        const project: Project = JSON.parse(recovery);
+        if (
+          project.files.some(
+            (file) =>
+              !file.deleted &&
+              (file.conflict || (!file.binary && this.recoveryText(file) !== file.baseline)),
+          )
+        )
+          throw new Error('Open this project and save or resolve its changes before deleting it.');
+      }
+      try {
+        await trash(canonical);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'TrashOutcomeUnknown')
+          this.uncertainTrash.add(canonical);
+        throw error;
+      }
+    }
+    this.store.forgetProject(entry.path);
   }
   async reopen(projectId: string) {
     const entry = this.store.recentProjects().find((entry) => entry.id === projectId);
@@ -625,6 +730,12 @@ export class ProjectService {
   }
   async command(command: ProjectCommand): Promise<ProjectSnapshot | null> {
     if (command.type === 'reopen') return this.reopen(command.projectId);
+    if (
+      command.type === 'close-project' ||
+      command.type === 'trash-project' ||
+      command.type === 'forget-project'
+    )
+      throw new Error('Use the native project removal boundary.');
     if (command.type === 'library') throw new Error('Use the library result boundary.');
     if (command.type === 'current') return this.current();
     if (!this.project) await this.current();

@@ -16,6 +16,9 @@ export const projectCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('current') }).strict(),
   z.object({ type: z.literal('library') }).strict(),
   z.object({ type: z.literal('reopen'), projectId: id }).strict(),
+  z.object({ type: z.literal('close-project'), projectId: id }).strict(),
+  z.object({ type: z.literal('trash-project'), projectId: id }).strict(),
+  z.object({ type: z.literal('forget-project'), projectId: id }).strict(),
   z
     .object({
       type: z.literal('sync'),
@@ -121,6 +124,7 @@ export const recentProjectSchema = z
     path: z.string().min(1).max(4096),
     lastOpened: z.number().nonnegative(),
     available: z.boolean(),
+    deleteBlockedReason: z.string().optional(),
   })
   .strict();
 export type RecentProject = z.infer<typeof recentProjectSchema>;

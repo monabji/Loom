@@ -60,6 +60,9 @@ export class ServiceController {
   constructor(
     private readonly spawn: () => ServiceTransport,
     private readonly timeoutMs = 5_000,
+    private readonly trashProject: (path: string) => Promise<void> = async () => {
+      throw new Error('System Trash is unavailable.');
+    },
   ) {}
 
   subscribe(listener: (event: ServiceEvent) => void): () => void {
@@ -167,6 +170,48 @@ export class ServiceController {
           return;
         }
         const data = parsed.data;
+        if (data.type === 'project-closed') {
+          this.projectLocation = null;
+          return;
+        }
+        if (data.type === 'trash-project') {
+          const pending = this.projectPending.get(data.id);
+          if (!pending) {
+            transport.postMessage({
+              type: 'trash-project-result',
+              id: data.id,
+              error: 'The project operation expired before Trash began. Refresh and retry.',
+            });
+            return;
+          }
+          clearTimeout(pending.timer);
+          pending.timer = setTimeout(
+            () =>
+              this.unavailable(
+                'TIMEOUT',
+                'System Trash did not finish. Restart Loom and inspect the folder before retrying.',
+              ),
+            300_000,
+          );
+          void Promise.resolve()
+            .then(() => this.trashProject(data.path))
+            .then(
+              () => {
+                if (generation === this.generation)
+                  transport.postMessage({ type: 'trash-project-result', id: data.id, error: null });
+              },
+              () => {
+                if (generation === this.generation)
+                  transport.postMessage({
+                    type: 'trash-project-result',
+                    id: data.id,
+                    error:
+                      'Could not move this project to system Trash. Its library entry and recovery data have been retained.',
+                  });
+              },
+            );
+          return;
+        }
         if (data.type === 'agent-result') {
           const p = this.agentPending.get(data.id);
           if (p) {

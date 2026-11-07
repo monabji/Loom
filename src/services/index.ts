@@ -14,6 +14,11 @@ import { gitCommandSchema, gitResultSchema } from '../contracts/git';
 import { cloneRepository, GitService } from './git/service';
 import { sourceArchive, sourcePreflight } from './git/export';
 import { z } from 'zod';
+let removingProject = false;
+const trashResults = new Map<string, (error: string | null) => void>();
+const trashResultSchema = z
+  .object({ type: z.literal('trash-project-result'), id: z.string(), error: z.string().nullable() })
+  .strict();
 const port = process.parentPort;
 if (!port) throw new Error('The Loom service requires a parent port.');
 const projects = new ProjectService(new MetadataStore(process.argv[2]));
@@ -88,6 +93,31 @@ port.on('message', (event: { data: unknown }) => {
     port.postMessage({ type: 'pong', id: ping.data.id, pid: process.pid, version: '0.1.0' });
     return;
   }
+  const trashResult = trashResultSchema.safeParse(event.data);
+  if (trashResult.success) {
+    trashResults.get(trashResult.data.id)?.(trashResult.data.error);
+    trashResults.delete(trashResult.data.id);
+    return;
+  }
+  const incoming = z
+    .object({ type: z.enum(['project', 'agent', 'latex', 'git', 'research']), id: z.string() })
+    .passthrough()
+    .safeParse(event.data);
+  if (removingProject && incoming.success) {
+    port.postMessage({
+      type: `${incoming.data.type}-result`,
+      id: incoming.data.id,
+      result: {
+        ok: false,
+        error: {
+          code: 'BUSY',
+          message: 'A project is moving to Trash. Wait for it to finish.',
+          retryable: true,
+        },
+      },
+    });
+    return;
+  }
   const researchRequest = z
     .object({ type: z.literal('research'), id: z.string(), command: researchCommandSchema })
     .strict()
@@ -126,6 +156,8 @@ port.on('message', (event: { data: unknown }) => {
   if (agent.success) {
     void agentReady
       .then((recoveryError) => {
+        if (removingProject)
+          throw new Error('A project is moving to Trash. Wait for it to finish.');
         if (gitMutating)
           throw new Error(
             'A Git operation is changing project files. Retry the agent request after it finishes.',
@@ -166,6 +198,8 @@ port.on('message', (event: { data: unknown }) => {
           await projects.current();
           return projects.buildContext(command.projectId);
         });
+        if (removingProject)
+          throw new Error('A project is moving to Trash or closing. Wait for it to finish.');
         let value: LatexValue;
         if (command.type === 'status')
           value = { kind: 'state', state: await builds.status(command.projectId, command.detect) };
@@ -483,6 +517,63 @@ port.on('message', (event: { data: unknown }) => {
               id: parsed.data.id,
               result: { ok: true, value: null, library: await projects.library() },
             });
+            return;
+          }
+          const removal = projectCommandSchema.safeParse(parsed.data.command);
+          if (
+            removal.success &&
+            (removal.data.type === 'close-project' ||
+              removal.data.type === 'trash-project' ||
+              removal.data.type === 'forget-project')
+          ) {
+            if (agents.active() || gitMutating)
+              throw new Error('Stop active agent and Git operations before removing a project.');
+            removingProject = true;
+            try {
+              if (builds.active())
+                throw new Error('Stop active builds before removing or closing a project.');
+              if (agents.active() || gitMutating)
+                throw new Error('Stop active agent and Git operations before removing a project.');
+              if (removal.data.type === 'close-project') {
+                await projects.closeProject(removal.data.projectId);
+                language.dispose();
+                port.postMessage({ type: 'project-closed' });
+                port.postMessage({
+                  type: 'project-result',
+                  id: parsed.data.id,
+                  result: { ok: true, value: null, library: await projects.library() },
+                });
+                return;
+              }
+              await projects.removeProject(
+                removal.data.projectId,
+                removal.data.type === 'trash-project' ? 'trash' : 'forget',
+                (path) =>
+                  new Promise<void>((resolve, reject) => {
+                    const timer = setTimeout(() => {
+                      trashResults.delete(parsed.data.id);
+                      const error = new Error(
+                        'System Trash did not reply. The library entry and recovery data are retained. Restart Loom and inspect the folder and Trash before retrying.',
+                      );
+                      error.name = 'TrashOutcomeUnknown';
+                      reject(error);
+                    }, 290_000);
+                    trashResults.set(parsed.data.id, (error) => {
+                      clearTimeout(timer);
+                      error ? reject(new Error(error)) : resolve();
+                    });
+                    port.postMessage({ type: 'trash-project', id: parsed.data.id, path });
+                  }),
+              );
+              port.postMessage({
+                type: 'project-result',
+                id: parsed.data.id,
+                result: { ok: true, value: null, library: await projects.library() },
+              });
+            } finally {
+              removingProject = false;
+              trashResults.delete(parsed.data.id);
+            }
             return;
           }
           const previousProject = projects.nativeLocation()?.projectId;

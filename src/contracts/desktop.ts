@@ -129,6 +129,10 @@ export const serviceRequestSchema = z
   })
   .strict();
 export const serviceMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('project-closed') }).strict(),
+  z
+    .object({ type: z.literal('trash-project'), id: z.string(), path: z.string().min(1).max(4096) })
+    .strict(),
   z
     .object({ type: z.literal('research-result'), id: z.string(), result: researchResultSchema })
     .strict(),
