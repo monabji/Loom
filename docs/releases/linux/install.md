@@ -14,7 +14,7 @@ chmod u+x Loom-0.1.0.AppImage
 
 Replace the filename with the actual candidate version. The checksum must report `OK`. A checksum detects changed bytes; it does not authenticate a publisher. No signing identity or signed release is currently provided.
 
-Run as your normal user in a graphical session. Do not disable Electron sandboxing to work around launch failure. AppImage native mounting requires FUSE support. If mounting fails, retain the exact error for the release checklist. Extraction is a diagnostic alternative, not native-launch verification:
+Run as your normal user in a graphical session. Do not disable Electron sandboxing to work around launch failure. AppImage native mounting requires FUSE support, including `libfuse.so.2` and a working mount helper. Ubuntu 24.04 names its library package `libfuse2t64`; follow the [AppImage FUSE instructions](https://docs.appimage.org/user-guide/troubleshooting/fuse.html) for your distribution. If mounting fails, retain the exact error for the release checklist. Extraction is a diagnostic alternative, not native-launch verification:
 
 ```sh
 ./Loom-0.1.0.AppImage --appimage-extract

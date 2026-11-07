@@ -14,4 +14,4 @@ Run `npx playwright test tests/e2e/git.spec.ts tests/e2e/project-manager.spec.ts
 
 ## Gotchas
 
-Git tests use local repositories. Native Trash is intercepted in fixtures, so real system Trash and desktop integration remain manual clean-target gates.
+Git tests use local repositories. The project-manager suite injects a Trash failure, then restores the real `shell.trashItem` and verifies successful removal and preserved siblings. This proves host Trash invocation; clean-target Trash recovery and desktop integration remain separate gates.
