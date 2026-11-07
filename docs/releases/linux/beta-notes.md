@@ -23,4 +23,4 @@ SHA-256: `050664bfec7130928fb5c8eb01c5a584198a09067dc96cffcfb24822e055cd47`.
 - Loom has no Linux signing identity or automatic updater. Verify the published checksum before launch.
 - Stable release gates and refreshed dependency advisory review remain open. macOS and Windows are not supported by this beta.
 
-See the [installation and backup guide](install.md), [release checklist](README.md), and [security review](security-review.md).
+See the [installation and backup guide](https://github.com/monabji/loom/blob/release/linux-readiness/docs/releases/linux/install.md), [release checklist](https://github.com/monabji/loom/blob/release/linux-readiness/docs/releases/linux/README.md), and [security review](https://github.com/monabji/loom/blob/release/linux-readiness/docs/releases/linux/security-review.md).
