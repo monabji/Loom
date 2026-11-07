@@ -529,7 +529,7 @@ export class ProjectService {
         total += file.originalSize;
         if (++count > 2000 || total > 128 * 1024 * 1024)
           throw new Error('ZIP exceeds project import limits.');
-        return true;
+        return !file.name.split('/').includes('.git');
       },
     });
     await fs.mkdir(destination, { recursive: false });
