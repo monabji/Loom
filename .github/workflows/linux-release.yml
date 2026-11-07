@@ -1,0 +1,54 @@
+name: Linux release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    name: Check, package, and test AppImage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.7.0
+          cache: npm
+      - run: npm install --global npm@11.19.0
+      - run: npm ci
+      - run: npm run check
+      - name: Install AppImage and display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libasound2t64 libfuse2t64 libgbm1 libgtk-3-0 libnss3 libxss1 xvfb
+      - name: Build AppImage without publishing
+        run: npm run package:appimage
+      - name: Create and verify SHA-256 checksum
+        id: appimage
+        shell: bash
+        run: |
+          appimage="$(find release -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          chmod +x "$appimage"
+          npm run linux:checksum -- "$appimage"
+          npm run linux:verify-checksum -- "$appimage"
+          echo "path=$appimage" >> "$GITHUB_OUTPUT"
+      - name: Run packaged fixture journeys under Xvfb
+        env:
+          LOOM_E2E_EXECUTABLE: ${{ github.workspace }}/${{ steps.appimage.outputs.path }}
+        run: xvfb-run --auto-servernum npm run test:e2e
+      - name: Retain candidate and test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-release-candidate
+          if-no-files-found: warn
+          path: |
+            release/*.AppImage
+            release/*.AppImage.sha256
+            test-results/
+            playwright-report/
+            artifacts/

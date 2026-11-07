@@ -1,4 +1,5 @@
 import { resumeFromLibrary } from './helpers/project-library';
+import { electronLaunchOptions } from './helpers/launch';
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -56,7 +57,7 @@ async function launchDesktop(): Promise<void> {
   delete env.ELECTRON_RENDERER_URL;
   desktop = await _electron.launch({
     chromiumSandbox: true,
-    args: [resolve('out/main/index.js'), `--user-data-dir=${userData}`],
+    ...electronLaunchOptions(env, [`--user-data-dir=${userData}`]),
     env,
     timeout: 20_000,
   });

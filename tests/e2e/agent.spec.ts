@@ -1,5 +1,6 @@
 import { defaultBuildSettings } from '../../src/contracts/latex';
 import { resumeFromLibrary } from './helpers/project-library';
+import { electronLaunchOptions, isPackagedElectron } from './helpers/launch';
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { createServer, type Server, type ServerResponse } from 'node:http';
@@ -69,13 +70,7 @@ async function launchElectron() {
   delete env.ELECTRON_RENDERER_URL;
   app = await _electron.launch({
     chromiumSandbox: true,
-    ...(process.env.LOOM_AGENT_PACKAGED === '1'
-      ? { executablePath: resolve('release/linux-unpacked/loom') }
-      : {}),
-    args: [
-      ...(process.env.LOOM_AGENT_PACKAGED === '1' ? [] : [resolve('out/main/index.js')]),
-      `--user-data-dir=${join(directory, 'data')}`,
-    ],
+    ...electronLaunchOptions(process.env, [`--user-data-dir=${join(directory, 'data')}`]),
     env,
   });
   page = await app.firstWindow();
@@ -1366,9 +1361,9 @@ test('packaged large project stays editable during compilation and streamed agen
   test.skip(
     !workload ||
       process.env.LOOM_TEST_TEX !== '1' ||
-      process.env.LOOM_AGENT_PACKAGED !== '1' ||
+      !isPackagedElectron(process.env) ||
       process.platform !== 'linux',
-    'Set LOOM_PHASE8_PROJECT, LOOM_AGENT_PACKAGED=1 and LOOM_TEST_TEX=1 on Linux for the packaged compile/stream workload.',
+    'Set LOOM_PHASE8_PROJECT, LOOM_E2E_EXECUTABLE (or legacy LOOM_AGENT_PACKAGED=1) and LOOM_TEST_TEX=1 on Linux for the packaged compile/stream workload.',
   );
   test.setTimeout(240_000);
   if (!workload) throw new Error('Missing LOOM_PHASE8_PROJECT.');
@@ -1384,10 +1379,9 @@ test('packaged large project stays editable during compilation and streamed agen
     },
     test: testInfo.title,
     workload,
-    executable:
-      process.env.LOOM_AGENT_PACKAGED === '1'
-        ? resolve('release/linux-unpacked/loom')
-        : 'development',
+    executable: isPackagedElectron(process.env)
+      ? process.env.LOOM_E2E_EXECUTABLE || resolve('release/linux-unpacked/loom')
+      : 'development',
     limitation:
       'Synthetic OpenCode stream, not live provider evidence. The private source has a test-only TeX typesetting loop released after all 50 frames: overlap is synchronized, not ordinary compile throughput. Full observed build duration includes this gate. CPU/PSS are one uncontrolled shaped-workload sample, not provider latency or memory-growth evidence. Animation frames are not physical display presentation.',
   };

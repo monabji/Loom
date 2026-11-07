@@ -1,5 +1,6 @@
 import { defaultBuildSettings, type BuildState } from '../../src/contracts/latex';
 import { resumeFromLibrary } from './helpers/project-library';
+import { electronLaunchOptions } from './helpers/launch';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
@@ -16,11 +17,7 @@ async function launch() {
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
   app = await _electron.launch({
-    ...(process.env.LOOM_E2E_EXECUTABLE ? { executablePath: process.env.LOOM_E2E_EXECUTABLE } : {}),
-    args: [
-      ...(process.env.LOOM_E2E_EXECUTABLE ? [] : [resolve('out/main/index.js')]),
-      `--user-data-dir=${join(directory, 'data')}`,
-    ],
+    ...electronLaunchOptions(process.env, [`--user-data-dir=${join(directory, 'data')}`]),
     env,
     chromiumSandbox: true,
   });

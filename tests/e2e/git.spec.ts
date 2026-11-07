@@ -1,4 +1,5 @@
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { electronLaunchOptions } from './helpers/launch';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -92,7 +93,7 @@ test.beforeEach(async ({}, testInfo) => {
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
   app = await _electron.launch({
-    args: [resolve('out/main/index.js'), `--user-data-dir=${join(dir, 'data')}`],
+    ...electronLaunchOptions(env, [`--user-data-dir=${join(dir, 'data')}`]),
     env,
     chromiumSandbox: true,
   });

@@ -1,4 +1,5 @@
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { electronLaunchOptions } from './helpers/launch';
 import { execFileSync } from 'node:child_process';
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -93,7 +94,6 @@ test('opens and measures the packaged Phase 8 synthetic workload', async () => {
   // Typing replaces the selected search match and is saved to disk. Always
   // measure a private copy so repeat runs use identical, untouched inputs.
   await cp(workload, projectCopy, { recursive: true });
-  const executable = process.env.LOOM_E2E_EXECUTABLE ?? resolve('release/linux-unpacked/loom');
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string',
@@ -103,10 +103,15 @@ test('opens and measures the packaged Phase 8 synthetic workload', async () => {
   delete env.ELECTRON_RENDERER_URL;
 
   const launchStart = performance.now();
+  const launchOptions = electronLaunchOptions(
+    process.env,
+    [`--user-data-dir=${userData}`],
+    resolve('release/linux-unpacked/loom'),
+  );
+  const executable = launchOptions.executablePath ?? resolve('out/main/index.js');
   app = await _electron.launch({
-    executablePath: executable,
+    ...launchOptions,
     chromiumSandbox: true,
-    args: [`--user-data-dir=${userData}`],
     env,
     timeout: 30_000,
   });

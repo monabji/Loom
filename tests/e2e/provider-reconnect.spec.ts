@@ -1,4 +1,5 @@
 import { resumeFromLibrary } from './helpers/project-library';
+import { electronLaunchOptions } from './helpers/launch';
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,13 +29,7 @@ for (const harness of ['codex', 'opencode'] as const) {
       delete env.ELECTRON_RENDERER_URL;
       app = await _electron.launch({
         chromiumSandbox: true,
-        ...(process.env.LOOM_AGENT_PACKAGED === '1'
-          ? { executablePath: resolve('release/linux-unpacked/loom') }
-          : {}),
-        args: [
-          ...(process.env.LOOM_AGENT_PACKAGED === '1' ? [] : [resolve('out/main/index.js')]),
-          `--user-data-dir=${join(directory, 'data')}`,
-        ],
+        ...electronLaunchOptions(process.env, [`--user-data-dir=${join(directory, 'data')}`]),
         env,
       });
       page = await app.firstWindow();

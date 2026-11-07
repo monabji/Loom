@@ -1,4 +1,5 @@
 import { resumeFromLibrary } from './helpers/project-library';
+import { electronLaunchOptions } from './helpers/launch';
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -22,11 +23,7 @@ test.beforeEach(async () => {
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
   app = await _electron.launch({
-    ...(process.env.LOOM_E2E_EXECUTABLE ? { executablePath: process.env.LOOM_E2E_EXECUTABLE } : {}),
-    args: [
-      ...(process.env.LOOM_E2E_EXECUTABLE ? [] : [resolve('out/main/index.js')]),
-      `--user-data-dir=${join(dir, 'data')}`,
-    ],
+    ...electronLaunchOptions(process.env, [`--user-data-dir=${join(dir, 'data')}`]),
     env,
     chromiumSandbox: true,
   });
