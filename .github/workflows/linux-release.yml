@@ -19,6 +19,12 @@ jobs:
           cache: npm
       - run: npm install --global npm@11.19.0
       - run: npm ci
+      - name: Review production and build dependency advisories
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          npm audit --audit-level=high --json > artifacts/dependency-audit.json
+          npm audit --omit=dev --audit-level=high --json > artifacts/production-dependency-audit.json
       - run: npm run check
       - name: Install AppImage and display dependencies
         run: |
