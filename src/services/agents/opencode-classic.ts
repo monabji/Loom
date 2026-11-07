@@ -3,7 +3,7 @@ import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { imageMime } from '../../domain/images';
 import { openCodeExecution } from './evidence';
-import { agentRequestError } from './request-error';
+import { agentRequestError, readAgentSession } from './request-error';
 import type { AgentMessage, AgentModel, AgentSettings } from '../../contracts/agent';
 import type { spawnOwnedTool } from '../latex/tools';
 import { list, object, privateEndpoint, string, type HarnessAdapter } from './opencode';
@@ -175,7 +175,7 @@ export class OpenCodeClassicAdapter implements HarnessAdapter {
     return sessionPath(id) + query(this.directory);
   }
   async session(id: string) {
-    const result = object(await this.request('GET', this.path(id)));
+    const result = object(await readAgentSession(() => this.request('GET', this.path(id))));
     const messages = list(
       await this.request('GET', sessionPath(id) + '/message' + query(this.directory)),
     );

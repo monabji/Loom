@@ -9,7 +9,7 @@ import { harnessExecutable } from './runtime';
 import { openCodeServerEndpoint } from './startup';
 import { OpenCodeClassicAdapter, supportedClassicVersion } from './opencode-classic';
 import { openCodeExecution } from './evidence';
-import { agentRequestError } from './request-error';
+import { agentRequestError, readAgentSession } from './request-error';
 
 const nativeObject = z.record(z.string(), z.unknown());
 export const object = (value: unknown): Record<string, unknown> => nativeObject.parse(value);
@@ -316,7 +316,11 @@ export class OpenCodeAdapter implements HarnessAdapter {
   }
   async session(sessionId: string) {
     return object(
-      object(await this.request('GET', '/api/session/' + encodeURIComponent(sessionId))).data,
+      object(
+        await readAgentSession(() =>
+          this.request('GET', '/api/session/' + encodeURIComponent(sessionId)),
+        ),
+      ).data,
     );
   }
   async submit(

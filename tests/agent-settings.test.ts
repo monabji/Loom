@@ -8,7 +8,7 @@ import { MetadataStore } from '../src/services/project/store';
 import { ProjectService } from '../src/services/project/projects';
 import { BuildService } from '../src/services/latex/builds';
 
-it('keeps the active chat and supervised permissions when another native chat cannot resume', async () => {
+it('preserves the selected chat settings and blocks sends when its native session belongs to another folder', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'loom-settings-'));
   const root = join(dir, 'paper');
   await mkdir(root);
@@ -41,11 +41,32 @@ it('keeps the active chat and supervised permissions when another native chat ca
     close: async () => {},
   };
   try {
+    const selected = await agents.command({
+      type: 'session',
+      projectId: project.id,
+      sessionId: 'target',
+    });
+    expect(selected.sessionId).toBe('target');
+    expect(selected.settings).toEqual({ permissionMode: 'full-access', reasoning: 'high' });
+    expect(selected).toMatchObject({
+      sessionUnavailable: true,
+      restore: { reason: 'folder-mismatch' },
+    });
+    expect(
+      JSON.parse(store.get(`agent-sessions:${project.id}`)!).sessions[0].nativeSessions.opencode,
+    ).toBe('target');
     await expect(
-      agents.command({ type: 'session', projectId: project.id, sessionId: 'target' }),
-    ).rejects.toThrow('different paper folder');
-    expect(internal.state.sessionId).toBe('current');
-    expect(internal.state.settings).toEqual({ permissionMode: 'supervised', reasoning: 'low' });
+      agents.command({
+        type: 'send',
+        projectId: project.id,
+        sessionId: 'target',
+        prompt: 'Change the paper',
+        model: { id: 'm', providerId: 'p', name: 'M', images: false, tools: true },
+        attachments: [],
+        selection: null,
+        revision: 'revision',
+      }),
+    ).rejects.toThrow('Restore this conversation');
   } finally {
     await agents.close();
     store.close();

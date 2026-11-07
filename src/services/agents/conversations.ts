@@ -25,6 +25,7 @@ export const conversationSchema = z
     settings: agentSettingsSchema.optional(),
     nativeSessions: nativeIds.optional(),
     nativeSettings: settings.optional(),
+    pendingHandoff: z.array(harnessSchema).max(2).optional(),
     history: z.array(agentMessageSchema).max(200).optional(),
     seenMessages: z.array(z.string().max(48)).max(50000).optional(),
   })

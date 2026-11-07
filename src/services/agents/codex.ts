@@ -10,7 +10,7 @@ import { harnessExecutable } from './runtime';
 import { StringDecoder } from 'node:string_decoder';
 import { imageMime } from '../../domain/images';
 import { executionEvidence } from './evidence';
-import { AgentRequestError } from './request-error';
+import { AgentRequestError, AgentSessionError } from './request-error';
 
 type Session = {
   directory: string;
@@ -402,8 +402,7 @@ export class CodexAdapter implements HarnessAdapter {
   async resume(sessionId: string, directory: string) {
     const existing = this.sessions.get(sessionId);
     if (existing) {
-      if (existing.directory !== directory)
-        throw new Error('This Codex conversation belongs to another paper folder.');
+      if (existing.directory !== directory) throw new AgentSessionError('folder-mismatch');
       return;
     }
     const response = object(
@@ -414,8 +413,7 @@ export class CodexAdapter implements HarnessAdapter {
       }),
     );
     const thread = object(response.thread);
-    if (string(thread.cwd) !== directory)
-      throw new Error('This Codex conversation belongs to another paper folder.');
+    if (string(thread.cwd) !== directory) throw new AgentSessionError('folder-mismatch');
     const s: Session = {
       directory,
       messages: [],

@@ -146,6 +146,14 @@ export const agentStateSchema = z
       .max(100),
     sessionId: id.nullable(),
     sessionUnavailable: z.boolean().optional(),
+    restore: z
+      .object({
+        sessionId: id,
+        reason: z.enum(['missing', 'retryable', 'auth', 'folder-mismatch']),
+        message: z.string().max(2000),
+      })
+      .strict()
+      .optional(),
     settings: agentSettingsSchema,
     messages: z.array(agentMessageSchema).max(200),
     permissions: z.array(agentPermissionSchema).max(100),
@@ -211,6 +219,8 @@ export const agentCommandSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('session'), projectId: id, sessionId: id.optional() }).strict(),
+  z.object({ type: z.literal('retry-session'), projectId: id, sessionId: id }).strict(),
+  z.object({ type: z.literal('recover-session'), projectId: id, sessionId: id }).strict(),
   z
     .object({
       type: z.literal('send'),

@@ -70,7 +70,8 @@ describe('conversation connection recovery', () => {
       sessionUnavailable: true,
       messages: [{ text: 'Retain me' }],
     });
-    expect(state.error).toContain('unavailable');
+    expect(state).toMatchObject({ restore: { sessionId: 'chat', reason: 'retryable' } });
+    expect(state.error).toContain('retry');
     service.resume = vi.fn(async () => {});
     await service.resumeCurrent();
     expect(state).toMatchObject({ sessionId: 'chat', sessionUnavailable: false });

@@ -176,7 +176,7 @@ describe('Codex adapter protocol boundaries', () => {
     expect(await adapter.messages('thread')).toMatchObject([{ text: 'Earlier' }]);
     await adapter.resume('thread', '/paper');
     expect(adapter.rpc).toHaveBeenCalledTimes(1);
-    await expect(adapter.resume('thread', '/other')).rejects.toThrow('another paper');
+    await expect(adapter.resume('thread', '/other')).rejects.toThrow('different paper folder');
   });
   it('waits for the supervised child to exit before close resolves', async () => {
     const { adapter, child } = fixture();

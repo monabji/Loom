@@ -33,3 +33,24 @@ export function agentRequestError(harness: string, error: unknown) {
       : `${harness} could not complete the request. The outcome is uncertain; reconnect and inspect the conversation before retrying.`;
   return new AgentRequestError(message, status, disposition, { cause: error });
 }
+
+export class AgentSessionError extends Error {
+  constructor(readonly reason: 'missing' | 'folder-mismatch') {
+    super(
+      reason === 'missing'
+        ? 'The saved agent session was not found.'
+        : 'This conversation belongs to a different paper folder.',
+    );
+    this.name = 'AgentSessionError';
+  }
+}
+
+export async function readAgentSession<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof AgentRequestError && error.status === 404)
+      throw new AgentSessionError('missing');
+    throw error;
+  }
+}

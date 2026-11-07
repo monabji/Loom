@@ -23,7 +23,7 @@ import { CodexAdapter } from './codex';
 import { AgentTools } from './tools';
 import { imageMime } from '../../domain/images';
 import { validateImage } from './images';
-import { AgentRequestError } from './request-error';
+import { AgentRequestError, AgentSessionError } from './request-error';
 import { diagnosticContext } from './diagnostic-context';
 
 const reconnectSchema = z
@@ -199,13 +199,28 @@ export class AgentService {
       await this.ensureNative(s.sessionId);
       await this.resume(s.sessionId);
       s.sessionUnavailable = false;
+      delete s.restore;
       s.error = '';
     } catch (error) {
-      if (this.changes.unsettledExternal()) throw error;
       s.sessionUnavailable = true;
       s.permissions = [];
       s.questions = [];
-      s.error = `The saved conversation is unavailable on this server. Start a new chat to continue; recovery comparisons are retained. ${error instanceof Error ? error.message : ''}`;
+      const reason =
+        error instanceof AgentSessionError
+          ? error.reason
+          : error instanceof AgentRequestError && (error.status === 401 || error.status === 403)
+            ? 'auth'
+            : 'retryable';
+      const message =
+        reason === 'missing'
+          ? 'The saved session is missing from this agent. Recover this chat to continue with its saved history. Nothing will be resent.'
+          : reason === 'auth'
+            ? 'Sign in to the agent or check access, then retry restoring this chat. Saved history is retained.'
+            : reason === 'folder-mismatch'
+              ? 'This session belongs to a different paper folder. Connect the original agent and retry. Saved history is retained.'
+              : 'Could not restore this chat. Check the agent connection and retry. Saved history is retained.';
+      s.restore = { sessionId: s.sessionId, reason, message };
+      s.error = message;
     }
   }
   private async discardInterrupted(kind: HarnessKind) {
@@ -642,6 +657,7 @@ export class AgentService {
         if (s.sessionId === command.sessionId) {
           s.sessionId = null;
           s.sessionUnavailable = false;
+          delete s.restore;
           s.messages = [];
           s.permissions = [];
           s.questions = [];
@@ -662,18 +678,59 @@ export class AgentService {
       const adapter = this.adapter;
       if (!adapter || s.connection !== 'connected')
         throw new Error('Connect an agent in Agent connections first.');
-      if (command.type === 'session') {
-        if (s.running) throw new Error('Stop the current request before changing chats.');
+      if (command.type === 'recover-session') {
+        if (
+          command.sessionId !== s.sessionId ||
+          s.restore?.reason !== 'missing' ||
+          s.restore.sessionId !== command.sessionId
+        )
+          throw new Error(
+            'Only a confirmed missing session in the selected chat can be recovered.',
+          );
+        if (this.active())
+          throw new Error('Stop or settle the previous request before recovering this chat.');
+        // Revalidate before replacing: authentication, transport and folder errors never reset a mapping.
+        await this.resumeCurrent();
+        if (!s.restore) return structuredClone(s);
+        if (s.restore.reason !== 'missing') return structuredClone(s);
+        const ref = this.sessions.find((ref) => ref.id === command.sessionId)!;
+        const root = (
+          await this.projects.run(async () => this.projects.buildContext(this.projectId))
+        ).root;
+        const nativeId = await adapter.create(root);
+        if (!nativeId) throw new Error('The harness did not return a session identity.');
+        const previous = { nativeSessions: ref.nativeSessions, pendingHandoff: ref.pendingHandoff };
+        ref.nativeSessions = { ...ref.nativeSessions, [s.harness]: nativeId };
+        ref.pendingHandoff = [...new Set([...(ref.pendingHandoff ?? []), s.harness])];
+        try {
+          this.persist();
+        } catch (error) {
+          Object.assign(ref, previous);
+          throw error;
+        }
+        s.sessionUnavailable = false;
+        delete s.restore;
+        s.error = '';
+      } else if (command.type === 'retry-session') {
+        if (command.sessionId !== s.sessionId) throw new Error('Select this chat before retrying.');
+        if (s.running) throw new Error('Stop the current request before restoring this chat.');
+        await this.resumeCurrent();
+        this.persist();
+      } else if (command.type === 'session') {
+        if (this.active())
+          throw new Error('Stop or settle the current request before changing chats.');
         if (command.sessionId) {
-          if (!this.sessions.some((r) => r.id === command.sessionId))
-            throw new Error('This conversation is no longer available.');
-          await this.ensureNative(command.sessionId);
-          await this.resume(command.sessionId);
-          s.sessionUnavailable = false;
-          const ref = this.sessions.find((ref) => ref.id === command.sessionId)!;
-          s.settings = ref.nativeSettings?.[s.harness] ?? defaultAgentSettings();
+          const ref = this.sessions.find((ref) => ref.id === command.sessionId);
+          if (!ref) throw new Error('This conversation is no longer available.');
+          s.sessionId = ref.id;
+          s.messages = ref.history ?? [];
+          s.settings =
+            ref.nativeSettings?.[s.harness] ??
+            (ref.harness === s.harness ? ref.settings : undefined) ??
+            defaultAgentSettings();
           ref.harness = s.harness;
           ref.settings = { ...s.settings };
+          await this.resumeCurrent();
           this.persist();
         } else {
           if (this.sessions.length >= 100)
@@ -685,6 +742,7 @@ export class AgentService {
           if (!id) throw new Error('The harness did not return a session identity.');
           s.sessionId = randomUUID();
           s.sessionUnavailable = false;
+          delete s.restore;
           s.error = '';
           this.sessions.unshift({
             id: s.sessionId,
@@ -700,9 +758,7 @@ export class AgentService {
         }
       } else if (command.type === 'send') {
         if (s.sessionUnavailable)
-          throw new Error(
-            'This conversation is unavailable on the connected agent. Start a new chat.',
-          );
+          throw new Error('Restore this conversation before sending. Saved history is retained.');
         if (s.running || this.changes.unsettled())
           throw new Error('Reconnect and stop the previous request before sending another.');
         if (command.sessionId !== s.sessionId)
@@ -756,8 +812,13 @@ export class AgentService {
         const { context, turn } = prepared;
         const errorContext = diagnosticContext(context, buildState, command.workspaceContext);
         const selection = command.selection;
-        const history = this.sessions.find((ref) => ref.id === s.sessionId)?.history ?? [];
-        const handoff = (history.at(-1)?.harness !== s.harness ? history : [])
+        const conversation = this.sessions.find((ref) => ref.id === s.sessionId);
+        const history = conversation?.history ?? [];
+        const handoff = (
+          conversation?.pendingHandoff?.includes(s.harness) || history.at(-1)?.harness !== s.harness
+            ? history
+            : []
+        )
           .filter((message) => message.role === 'user' || message.role === 'assistant')
           .slice(-12)
           .map((message) => `${message.role} (${message.harness ?? 'agent'}): ${message.text}`)
@@ -778,6 +839,7 @@ export class AgentService {
             { ...s.settings, reasoning },
           );
           const ref = this.sessions.find((r) => r.id === command.sessionId)!;
+          ref.pendingHandoff = ref.pendingHandoff?.filter((kind) => kind !== s.harness);
           if (!ref.titleEdited && ref.title === 'New conversation')
             ref.title = command.prompt.slice(0, 80);
           this.persist();
@@ -842,7 +904,7 @@ export class AgentService {
     if (adapter instanceof CodexAdapter) await adapter.resume(nativeId, context.root);
     const session = await adapter.session(nativeId);
     if (string(object(session.location).directory) !== context.root)
-      throw new Error('This conversation belongs to a different paper folder.');
+      throw new AgentSessionError('folder-mismatch');
     const unresolved = this.changes.unsettledExternal();
     if (
       (await adapter.active(nativeId)) ||
