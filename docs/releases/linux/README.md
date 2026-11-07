@@ -56,7 +56,7 @@ Verified locally: Omarchy 4.0.4 x86_64, kernel 7.2.3-arch1-3, Node 26.7.0, npm 1
 
 Mounted checks required a checksum-verified Ubuntu FUSE2 library in the evidence directory and a local link to the host's fusermount3. No system packages or global security policy changed. A clean profile on this host is not a clean Ubuntu machine. Codex and OpenCode live permission and reconnect journeys now pass on this host, but they do not establish those behaviors on clean Ubuntu targets. Host Trash invocation is exercised, including injected failure and subsequent real removal; supported-target Trash recovery remains unverified.
 
-GitHub CLI is authenticated and can read the repository. The remote currently exposes only its regular CI workflow. The Linux release workflow and branch exist only in this local checkout, so GitHub Actions cannot run this candidate until the branch is pushed. Docker access is denied and no QEMU binary is installed on the host.
+GitHub CLI is authenticated. Branch `release/linux-readiness` is pushed, but GitHub exposes only the regular CI workflow from the default branch. The Linux release workflow is on the release branch and is not dispatchable until it is available from the default branch. No remote Linux workflow result exists. Docker access is denied and no QEMU binary is installed on the host.
 
 See [integration skips](skips.md), [security review and candidate exceptions](security-review.md), [installation and backups](install.md), [release procedure](release.md), and [retrospective](retro.md).
 

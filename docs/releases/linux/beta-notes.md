@@ -17,6 +17,7 @@ SHA-256: `050664bfec7130928fb5c8eb01c5a584198a09067dc96cffcfb24822e055cd47`.
 ## Known limitations
 
 - Clean Ubuntu 24.04 GNOME Wayland and X11, native desktop integration, and Trash recovery have not been verified.
+- The Linux release workflow has not run on GitHub Actions; it is present on the release branch but is not available from the default branch for dispatch.
 - On the tested Omarchy host, Electron's native Wayland versus XWayland backend was not established.
 - Codex and OpenCode are optional native integrations; install and authenticate them separately.
 - Loom has no Linux signing identity or automatic updater. Verify the published checksum before launch.
