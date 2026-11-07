@@ -1,6 +1,6 @@
 # Integration evidence and opt-ins
 
-The standard check reports 32 skipped tests in 10 integration files. The full mounted run with real TeX reports eight skipped Electron tests. Skips are not passes. The canonical totals and exact test names remain in the logs linked from the [release checklist](README.md).
+The standard check reports 10 wholly skipped files and 32 skipped tests, including opt-ins in otherwise executed files. The full mounted run with real TeX reports eight skipped Electron tests. Skips are not passes. The canonical totals and exact test names remain in the logs linked from the [release checklist](README.md).
 
 ## Unit-run integration prerequisites
 
@@ -9,6 +9,9 @@ The standard check reports 32 skipped tests in 10 integration files. The full mo
 - `tests/agent-workflow-live.test.ts` selects `codex`, `classic`, or `next` through comma-separated `LOOM_WORKFLOW_LIVE`. Classic also needs its explicit executable path.
 - `tests/agent-image-live.test.ts` and `tests/agent-computation-live.test.ts` select `opencode`, `codex`, or both through `LOOM_IMAGE_LIVE` and `LOOM_COMPUTE_LIVE`. Appropriate model capabilities and authorized accounts are required.
 - The image, diagram, and science workflow files require `LOOM_IMAGE_WORKFLOW=1`, `LOOM_DIAGRAM_WORKFLOW=1`, and `LOOM_SCIENCE_WORKFLOW=1`, respectively, plus their documented native provider/tool prerequisites.
+- `tests/phase8-compile-gate.test.ts` also requires `LOOM_TEST_TEX=1` and the installed toolchain.
+- Real TeX cases in `tests/agent-conversations-review.test.ts` and `tests/agent-tools-tikz.test.ts` require `LOOM_LATEX_LIVE=1`; the latter also has an inference case controlled by `LOOM_AGENT_INFERENCE=1`.
+- Four actual classic-provider probes in `tests/opencode-classic.test.ts` require an explicit `LOOM_CLASSIC_PROBE` executable and the prerequisites described in that file.
 - `tests/research-live.test.ts` requires `LOOM_RESEARCH_AGENT_LIVE=1`, network access, and its native provider prerequisites.
 
 Inspect each test's setup before enabling it. These opt-ins can invoke real providers and tools. None was silently enabled for the standard check.
