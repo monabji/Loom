@@ -26,6 +26,8 @@ The [specification](../../../.scratch/linux-stable/spec.md) defines the scope an
 
 SHA-256: `050664bfec7130928fb5c8eb01c5a584198a09067dc96cffcfb24822e055cd47`.
 
+Published as the [Loom Linux 0.1.0 Beta prerelease](https://github.com/monabji/loom/releases/tag/v0.1.0-beta.1). Both published assets were downloaded and verified; the AppImage digest matches the candidate above. This beta does not change the stable-release NOT READY decision.
+
 This candidate includes the Codex permission-path disclosure fix. The exact AppImage passed the mounted Electron behavior suite, all three saved-data upgrade journeys, native reconnect checks, and separate supervised live Codex and OpenCode edit/compile/revert journeys. It remains a 0.1.0 candidate, not a stable release.
 
 ## Evidence index
