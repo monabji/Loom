@@ -16,15 +16,15 @@ The standard check reports 10 wholly skipped files and 32 skipped tests, includi
 
 Inspect each test's setup before enabling it. These opt-ins can invoke real providers and tools. None was silently enabled for the standard check.
 
-## Eight Electron skips with real TeX enabled
+## Eight default Electron skips with real TeX enabled
 
 - One missing-tool case is intentionally excluded by `LOOM_TEST_TEX=1`. It passed in the default source baseline where TeX opt-in was absent.
 - One authorized-paper case additionally requires `LOOM_PDF_PAPER` to identify an explicit synthetic paper.
-- One live agent creation/compile/revert journey requires `LOOM_AGENT_DESKTOP_LIVE=1` and its chosen native harness. It is not covered by the fixture server.
-- Two native reconnect journeys require `LOOM_NATIVE_RECONNECT=1` and authenticated installed harnesses.
+- One live agent creation/compile/revert journey requires `LOOM_AGENT_DESKTOP_LIVE=1` and its chosen native harness. Separate exact-candidate runs passed for Codex and OpenCode on the Omarchy host.
+- Two native reconnect journeys require `LOOM_NATIVE_RECONNECT=1` and installed harnesses. Both passed against the exact candidate on the Omarchy host.
 - Two large synthetic workload journeys require `LOOM_PHASE8_PROJECT` and their packaged/TeX prerequisites. No performance claim or optimization is based on these skipped workloads.
 - One live arXiv journey requires `LOOM_RESEARCH_LIVE=1`, network access, and real TeX. Local reference and Zotero fixture imports run separately.
 
 ## Environment limits
 
-The mounted application ran on the Omarchy developer host with locally supplied FUSE components. A Wayland desktop with X11 variables does not establish whether Electron used native Wayland or XWayland. Clean Ubuntu GNOME Wayland and X11, native desktop integration on those targets, and live provider enforcement remain unverified.
+The mounted application ran on the Omarchy developer host with locally supplied FUSE components. A Wayland desktop with X11 variables does not establish whether Electron used native Wayland or XWayland. Live Codex and OpenCode supervised permission, edit, PDF, revert, reconnect, and disconnect checks passed on this host. Clean Ubuntu GNOME Wayland and X11 and native desktop integration on those targets remain unverified. The first OpenCode desktop inference attempt timed out after a file write; two later runs passed, so model latency varied during this check.

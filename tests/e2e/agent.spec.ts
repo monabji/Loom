@@ -2278,6 +2278,14 @@ test('authorized live native agent creates LaTeX files, compiles and safely reve
     .filter({ hasText: codex ? /gpt-6.1-sol/i : 'Big Pickle' })
     .first()
     .click();
+  await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Permissions', exact: true })
+    .getByRole('button', { name: /^Supervised/ })
+    .click();
+  await expect(page.getByRole('button', { name: 'Permissions', exact: true })).toContainText(
+    'Supervised',
+  );
   await page
     .getByRole('textbox', { name: 'Ask about your paper' })
     .fill(
@@ -2285,9 +2293,13 @@ test('authorized live native agent creates LaTeX files, compiles and safely reve
     );
   await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
   const limit = Date.now() + 110_000;
+  let approvedPermissions = 0;
   while (Date.now() < limit) {
     const permission = page.getByRole('button', { name: 'Allow once', exact: true });
-    if (await permission.isVisible()) await permission.click();
+    if (await permission.isVisible()) {
+      approvedPermissions += 1;
+      await permission.click();
+    }
     if (
       (await readFile(join(root, 'sections/notes.tex'), 'utf8').catch(() => '')).includes(
         'reproducible research',
@@ -2300,10 +2312,30 @@ test('authorized live native agent creates LaTeX files, compiles and safely reve
   await expect
     .poll(() => readFile(join(root, 'sections/notes.tex'), 'utf8'))
     .toContain('reproducible research');
-  await expect(page.getByRole('button', { name: 'Send to agent', exact: true })).toBeVisible();
+  const send = page.getByRole('button', { name: 'Send to agent', exact: true });
+  if (!(await send.isVisible())) {
+    const status = await page.evaluate(async () => {
+      const project = await window.loom!.project({ type: 'current' });
+      if (!project.ok || !project.value) return { project: project.ok ? 'missing' : project.error };
+      const state = await window.loom!.agent({ type: 'status', projectId: project.value.id });
+      if (!state.ok) return { status: state.error };
+      return {
+        connection: state.value.connection,
+        running: state.value.running,
+        error: state.value.error,
+        permissionCount: state.value.permissions.length,
+        questionCount: state.value.questions.length,
+        turnStatuses: state.value.turns.map((turn) => turn.status),
+      };
+    });
+    console.error(`Live agent did not return to ready state: ${JSON.stringify(status)}`);
+    await page.screenshot({ path: resolve('artifacts/live-agent-not-ready.png') });
+  }
+  await expect(send).toBeVisible();
+  expect(approvedPermissions).toBeGreaterThan(0);
   await page
     .getByRole('main', { name: 'Source workspace' })
-    .getByRole('button', { name: 'Create PDF', exact: true })
+    .getByRole('button', { name: /^(Create|Update) PDF$/ })
     .click();
   await expect(page.locator('.pdf-sheet canvas')).toBeVisible({ timeout: 25_000 });
   await expect(page.locator('.pdf-sheet')).toContainText(

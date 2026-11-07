@@ -1,6 +1,6 @@
 # Linux release readiness
 
-**Decision: NOT READY for a stable release.** Local preparation is complete on branch `release/linux-readiness`. Clean supported environments and live integration evidence are still missing.
+**Decision: NOT READY for a stable release.** Local preparation is complete on branch `release/linux-readiness`. Live Codex and OpenCode checks now pass on the developer host. Clean supported environments and remote CI evidence are still missing.
 
 The [specification](../../../.scratch/linux-stable/spec.md) defines the scope and acceptance criteria. [Prioritized tickets](../../../.scratch/linux-stable/issues) record dependencies. This file is the single checklist and evidence index; `decisions.tsv` records historical decisions and qualifications.
 
@@ -16,8 +16,8 @@ The [specification](../../../.scratch/linux-stable/spec.md) defines the scope an
 - [x] Review dependencies, published Electron advisory ranges, and the changed high-risk boundaries.
 - [x] Complete independent Standards/Spec review, follow-up review, and one retrospective.
 - [ ] Verify the exact candidate on clean Ubuntu 24.04 x86_64 GNOME Wayland and X11, including native desktop integration and Trash recovery.
-- [ ] Verify live supported Codex/OpenCode permission and reconnect enforcement separately from fixtures.
-- [ ] Execute the remote release workflow and resolve target-specific installation or sandbox failures.
+- [x] Verify live Codex and OpenCode permission prompts, editing, reconnect, and disconnect separately from fixtures on the Omarchy host.
+- [ ] Execute the Linux release workflow on GitHub Actions and resolve target-specific installation or sandbox failures.
 - [ ] After gates pass, build and reverify the 1.0.0 artifact and obtain authorization before pushing or publishing.
 
 ## Final local artifact
@@ -39,13 +39,17 @@ The final rebuild adds distribution notices. Its `app.asar` is byte-identical to
 - `artifacts/linux-release/premium-audit.json` and `premium-audit-final.json`: strict static product audits; runtime usability evidence remains separate.
 - `artifacts/linux-release/production-audit.json`: zero reported production vulnerabilities. `baseline/npm-audit.json` reports six moderate build-tool package findings and no high/critical findings. `build-audit-high-gate.json` passes the high-severity gate. `electron-advisories.json` retains the official published-advisory query and version-range assessment.
 - `artifacts/linux-release/standards-review.md`, `spec-review.md`, `followup-review-result.txt`, and `final-review.md`: independent Sol reviews. Initial upgrade/procedure objections are resolved. The final reviewer left packaging evidence pending; the completed `notices/` evidence closes those local items. Cross-family review was excluded by the model policy.
+- `artifacts/linux-release/resume-native-reconnect.log`, `resume-live-codex.log`, `resume-live-codex-retry.log`, `resume-live-opencode.log`, `resume-live-opencode-service.log`, `resume-live-opencode-diagnostic.log`, `resume-supervised-codex.log`, and `resume-supervised-opencode.log`: current-host native provider evidence against the exact candidate. Both providers passed reconnect and supervised edit, PDF, and revert journeys. The first OpenCode desktop run timed out after its first file write; two focused reruns passed. The live test now accepts the toolbar's Create PDF or Update PDF label and requires an observed Allow once approval.
+- `artifacts/linux-release/resume-host-access.md`: current remote workflow, branch, container, and VM access checks. GitHub CLI access is available, but the remote repository has no Linux release workflow and this branch is not on origin.
 - Earlier `integrated/`, native failure logs, and extracted-image proofs remain historical evidence. Initial native mounting failed for missing FUSE components; the successful host run used the recorded local setup.
 
 ## Verified environment and limits
 
 Verified locally: Omarchy 4.0.4 x86_64, kernel 7.2.3-arch1-3, Node 26.7.0, npm 11.19.0, Electron 45.2.1, and the installed local TeX/TexLab toolchain. The desktop session reports Wayland with both DISPLAY and WAYLAND_DISPLAY. Electron's native Wayland versus XWayland backend was not independently established.
 
-Mounted checks required a checksum-verified Ubuntu FUSE2 library in the evidence directory and a local link to the host's fusermount3. No system packages or global security policy changed. A clean profile on this host is not a clean Ubuntu machine. Git, agent, and Zotero fixtures do not establish live remote/provider enforcement. Host Trash invocation is exercised, including injected failure and subsequent real removal; supported-target Trash recovery remains unverified.
+Mounted checks required a checksum-verified Ubuntu FUSE2 library in the evidence directory and a local link to the host's fusermount3. No system packages or global security policy changed. A clean profile on this host is not a clean Ubuntu machine. Codex and OpenCode live permission and reconnect journeys now pass on this host, but they do not establish those behaviors on clean Ubuntu targets. Host Trash invocation is exercised, including injected failure and subsequent real removal; supported-target Trash recovery remains unverified.
+
+GitHub CLI is authenticated and can read the repository. The remote currently exposes only its regular CI workflow. The Linux release workflow and branch exist only in this local checkout, so GitHub Actions cannot run this candidate until the branch is pushed. Docker access is denied and no QEMU binary is installed on the host.
 
 See [integration skips](skips.md), [security review and candidate exceptions](security-review.md), [installation and backups](install.md), [release procedure](release.md), and [retrospective](retro.md).
 
@@ -57,4 +61,4 @@ The existing visual identity is unchanged. Performance work was not selected bec
 
 ## Remaining time
 
-Local preparation is finished. Stable validation has no reliable completion estimate until clean Ubuntu Wayland/X11 environments and authorized live-provider test access are available. The version remains 0.1.0 until the stable gates pass; the 1.0.0 artifact must then be rebuilt and reverified.
+The live provider checks are complete on the host. The remaining work is the clean Ubuntu Wayland/X11 validation, the remote release workflow, and a rebuilt 1.0.0 artifact after those gates pass. Estimate 1–3 working days once those environments and remote execution are available, if the checks pass without fixes. The version remains 0.1.0 until then.

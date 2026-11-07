@@ -9,8 +9,9 @@
 **Status:** blocked
 
 - [x] Run real TeX and synthetic profile upgrade checks; distinguish live agents from fixture checks.
+- [x] Verify live Codex and OpenCode supervised permissions, editing, reconnect, and disconnect on the exact candidate host build.
 - [ ] Ubuntu 24.04 Wayland and X11 pass exact AppImage journeys, native launch, and desktop integration.
 
 ## Blocker
 
-Clean Ubuntu 24.04 GNOME Wayland and X11 environments are unavailable. Mounted host checks and all three synthetic upgrade journeys passed. Live native integrations and desktop integration remain unverified.
+Clean Ubuntu 24.04 GNOME Wayland and X11 environments are unavailable. Mounted host checks, all three synthetic upgrade journeys, and the live Codex/OpenCode checks passed on the Omarchy host. Native desktop integration and Trash recovery on the supported Ubuntu targets remain unverified.

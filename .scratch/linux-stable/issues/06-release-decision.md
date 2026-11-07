@@ -13,4 +13,4 @@
 
 ## Decision
 
-Local review and the retrospective are complete. NOT READY is recorded in the canonical checklist. Stable sign-off remains blocked by ticket 05 and its clean-environment/live-integration evidence.
+Local review, the retrospective, and the live Codex/OpenCode permission and reconnect checks are complete. NOT READY remains recorded in the canonical checklist. Stable sign-off remains blocked by ticket 05's clean Ubuntu Wayland/X11 evidence and by the unrun remote release workflow.
