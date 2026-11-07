@@ -66,7 +66,7 @@ test.beforeEach(async ({}, testInfo) => {
       '.loom-manager-',
     ),
   );
-  await launch(process.env.LOOM_E2E_UPGRADE_FROM);
+  await launch(testInfo.tags.includes('@upgrade') ? process.env.LOOM_E2E_UPGRADE_FROM : undefined);
   await size(1440, 900);
 });
 test.afterEach(async () => {
@@ -76,70 +76,86 @@ test.afterEach(async () => {
   await app?.close();
   await rm(dir, { recursive: true, force: true });
 });
-test('startup library creates and reopens projects with isolated text, preferences, draft and device appearance after full restart', async () => {
-  await size(1440, 900);
-  await expect(page.getByRole('heading', { name: 'A place for your next paper' })).toBeVisible();
-  expect(
-    await page.locator('.library-content').evaluate((e) => e.scrollHeight <= e.clientHeight),
-  ).toBe(true);
-  await page.screenshot({ path: 'artifacts/project-manager-empty.png' });
-  await create('Paper A');
-  let editor = page.getByRole('textbox', { name: 'LaTeX source editor' });
-  await editor.fill('A saved human revision.');
-  let prompt = page.locator('.agent-prompt');
-  await prompt.fill('Unsent Paper A draft');
-  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
-  const appearance = page.getByRole('dialog', { name: 'Appearance', exact: true });
-  await appearance.getByRole('button', { name: /Iris/ }).click();
-  await appearance.press('Escape');
-  await page.getByRole('button', { name: 'Project file options', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Project settings', exact: true }).click();
-  await page.locator('.editor-preferences summary').click();
-  await page.getByRole('slider', { name: 'Editor font size' }).fill('19');
-  await page.keyboard.press('Escape');
-  await library();
-  expect(await readFile(join(dir, 'Paper A', 'main.tex'), 'utf8')).toBe('A saved human revision.');
-  await create('Paper B');
-  await expect(editor).not.toContainText('A saved human revision.');
-  await expect(prompt).toHaveValue('');
-  await editor.fill('B independent source.');
-  await library();
-  await page.screenshot({ path: 'artifacts/project-manager-list.png' });
-  await page.getByRole('button', { name: 'Grid view', exact: true }).click();
-  await page.screenshot({ path: 'artifacts/project-manager-grid.png' });
-  await page.getByRole('textbox', { name: 'Search projects' }).fill('unmatched');
-  await expect(page.getByRole('heading', { name: 'No matching projects' })).toBeVisible();
-  await page.getByRole('button', { name: 'Clear project search' }).click();
-  await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeFocused();
-  await app.close();
-  await launch();
-  editor = page.getByRole('textbox', { name: 'LaTeX source editor' });
-  prompt = page.locator('.agent-prompt');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'iris');
-  await expect(page.getByRole('button', { name: 'Grid view' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).not.toBeVisible();
-  await page.getByRole('button', { name: 'Open Paper A', exact: true }).focus();
-  await page.keyboard.press('Enter');
-  await expect(editor).toContainText('A saved human revision.');
-  await expect(prompt).toHaveValue('Unsent Paper A draft');
-  await expect(editor).toHaveCSS('font-size', '19px');
-  await library();
-  await page.getByRole('button', { name: 'Open Paper B', exact: true }).click();
-  await expect(editor).toContainText('B independent source.');
-  await expect(prompt).toHaveValue('');
-  await library();
-  await size(720, 540);
-  await page.getByRole('button', { name: 'Import project' }).focus();
-  await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('menuitem', { name: 'Import folder', exact: true })).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Import project' })).toBeFocused();
-  await page.screenshot({ path: 'artifacts/project-manager-small.png' });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});
+test(
+  'startup library creates and reopens projects with isolated text, preferences, draft and device appearance after full restart',
+  { tag: '@upgrade' },
+  async () => {
+    await size(1440, 900);
+    await expect(page.getByRole('heading', { name: 'A place for your next paper' })).toBeVisible();
+    expect(
+      await page.locator('.library-content').evaluate((e) => e.scrollHeight <= e.clientHeight),
+    ).toBe(true);
+    await page.screenshot({ path: 'artifacts/project-manager-empty.png' });
+    await create('Paper A');
+    let editor = page.getByRole('textbox', { name: 'LaTeX source editor' });
+    await editor.fill('A saved human revision.');
+    let prompt = page.locator('.agent-prompt');
+    await prompt.fill('Unsent Paper A draft');
+    await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+    const appearance = page.getByRole('dialog', { name: 'Appearance', exact: true });
+    await appearance.getByRole('button', { name: /Iris/ }).click();
+    await appearance.press('Escape');
+    await page.getByRole('button', { name: 'Project file options', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Project settings', exact: true }).click();
+    await page.locator('.editor-preferences summary').click();
+    await page.getByRole('slider', { name: 'Editor font size' }).fill('19');
+    await page.keyboard.press('Escape');
+    await library();
+    expect(await readFile(join(dir, 'Paper A', 'main.tex'), 'utf8')).toBe(
+      'A saved human revision.',
+    );
+    await create('Paper B');
+    await expect(editor).not.toContainText('A saved human revision.');
+    await expect(prompt).toHaveValue('');
+    await editor.fill('B independent source.');
+    await library();
+    await page.screenshot({ path: 'artifacts/project-manager-list.png' });
+    await page.getByRole('button', { name: 'Grid view', exact: true }).click();
+    await page.screenshot({ path: 'artifacts/project-manager-grid.png' });
+    await page.getByRole('textbox', { name: 'Search projects' }).fill('unmatched');
+    await expect(page.getByRole('heading', { name: 'No matching projects' })).toBeVisible();
+    await page.getByRole('button', { name: 'Clear project search' }).click();
+    await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeFocused();
+    const savedSources = await Promise.all(
+      ['Paper A', 'Paper B'].map((name) => readFile(join(dir, name, 'main.tex'))),
+    );
+    await app.close();
+    await launch();
+    expect(
+      await Promise.all(
+        ['Paper A', 'Paper B'].map((name) => readFile(join(dir, name, 'main.tex'))),
+      ),
+    ).toEqual(savedSources);
+    editor = page.getByRole('textbox', { name: 'LaTeX source editor' });
+    prompt = page.locator('.agent-prompt');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'iris');
+    await expect(page.getByRole('button', { name: 'Grid view' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).not.toBeVisible();
+    await page.getByRole('button', { name: 'Open Paper A', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(editor).toContainText('A saved human revision.');
+    await expect(prompt).toHaveValue('Unsent Paper A draft');
+    await expect(editor).toHaveCSS('font-size', '19px');
+    await library();
+    await page.getByRole('button', { name: 'Open Paper B', exact: true }).click();
+    await expect(editor).toContainText('B independent source.');
+    await expect(prompt).toHaveValue('');
+    await library();
+    await size(720, 540);
+    await page.getByRole('button', { name: 'Import project' }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menuitem', { name: 'Import folder', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Import project' })).toBeFocused();
+    await page.screenshot({ path: 'artifacts/project-manager-small.png' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  },
+);
 test('cancelled pickers and unavailable folders keep the manager and saved recovery state', async () => {
   await app.evaluate(({ dialog }) => {
     dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });

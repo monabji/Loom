@@ -47,7 +47,7 @@ async function readyPid(): Promise<number> {
   return result.value.pid;
 }
 
-async function launchDesktop(): Promise<void> {
+async function launchDesktop(executablePath?: string): Promise<void> {
   const env: Record<string, string> = Object.fromEntries(
     Object.entries(process.env).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string',
@@ -57,7 +57,10 @@ async function launchDesktop(): Promise<void> {
   delete env.ELECTRON_RENDERER_URL;
   desktop = await _electron.launch({
     chromiumSandbox: true,
-    ...electronLaunchOptions(env, [`--user-data-dir=${userData}`]),
+    ...electronLaunchOptions(
+      executablePath ? { ...env, LOOM_E2E_EXECUTABLE: executablePath } : env,
+      [`--user-data-dir=${userData}`],
+    ),
     env,
     timeout: 20_000,
   });
@@ -66,9 +69,11 @@ async function launchDesktop(): Promise<void> {
   await readyPid();
   if ((await page.locator('.library-project').count()) > 0) await resumeFromLibrary(page);
 }
-test.beforeEach(async () => {
+test.beforeEach(async ({}, testInfo) => {
   userData = await mkdtemp(join(tmpdir(), 'loom-desktop-e2e-'));
-  await launchDesktop();
+  await launchDesktop(
+    testInfo.tags.includes('@upgrade') ? process.env.LOOM_E2E_UPGRADE_FROM : undefined,
+  );
 });
 
 test.afterEach(async () => {
@@ -1012,54 +1017,73 @@ test('fuzzy filename navigation, live search refresh, IME and clearing remain us
   await expect(page.locator('.cm-projectSearchMatch')).toHaveCount(0);
 });
 
-test('IndexedDB-only edits survive renderer crash with disk divergence', async () => {
-  const folder = await openSyntheticProject();
-  const original = await readFile(join(folder, 'main.tex'), 'utf8');
-  const pid = await readyPid();
-  process.kill(pid, 'SIGSTOP');
-  stoppedPid = pid;
-  const editor = page.getByRole('textbox', { name: 'LaTeX source editor' });
-  await editor.focus();
-  await page.keyboard.press('Control+a');
-  await page.keyboard.type('Recovered human text');
-  // A readonly transaction queues after y-indexeddb writes and proves they committed.
-  await page.evaluate(async () => {
-    for (const info of await indexedDB.databases()) {
-      if (!info.name?.startsWith('loom:')) continue;
-      await new Promise<void>((resolve, reject) => {
-        const open = indexedDB.open(info.name!);
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const db = open.result;
-          const tx = db.transaction('updates', 'readonly');
-          tx.objectStore('updates').getAll();
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
+test(
+  'IndexedDB-only edits survive renderer crash with disk divergence',
+  { tag: '@upgrade' },
+  async () => {
+    const folder = await openSyntheticProject();
+    const original = await readFile(join(folder, 'main.tex'), 'utf8');
+    const pid = await readyPid();
+    process.kill(pid, 'SIGSTOP');
+    stoppedPid = pid;
+    const editor = page.getByRole('textbox', { name: 'LaTeX source editor' });
+    await editor.focus();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('Recovered human text');
+    // A readonly transaction queues after y-indexeddb writes and proves they committed.
+    await page.evaluate(async () => {
+      for (const info of await indexedDB.databases()) {
+        if (!info.name?.startsWith('loom:')) continue;
+        await new Promise<void>((resolve, reject) => {
+          const open = indexedDB.open(info.name!);
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const db = open.result;
+            const tx = db.transaction('updates', 'readonly');
+            tx.objectStore('updates').getAll();
+            tx.oncomplete = () => {
+              db.close();
+              resolve();
+            };
           };
-        };
-      });
-    }
-  });
-  expect(await readFile(join(folder, 'main.tex'), 'utf8')).toBe(original);
-  await writeFile(join(folder, 'main.tex'), 'External while stopped');
-  process.kill(pid, 'SIGKILL');
-  stoppedPid = undefined;
-  const recoveredWindow = desktop.waitForEvent('window');
-  await desktop.evaluate(({ BrowserWindow }) => {
-    const contents = BrowserWindow.getAllWindows()[0].webContents;
-    process.kill(contents.getOSProcessId(), 'SIGKILL');
-  });
-  page = await recoveredWindow;
-  await page.waitForLoadState('domcontentloaded');
-  await resumeFromLibrary(page);
-  await expect(page.getByRole('region', { name: 'File conflict' })).toBeVisible({ timeout: 15000 });
-  await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).toContainText(
-    'Recovered human text',
-  );
-  await page.getByRole('button', { name: 'Keep local text' }).click();
-  await expect.poll(() => readFile(join(folder, 'main.tex'), 'utf8')).toBe('Recovered human text');
-});
+        });
+      }
+    });
+    expect(await readFile(join(folder, 'main.tex'), 'utf8')).toBe(original);
+    await writeFile(join(folder, 'main.tex'), 'External while stopped');
+    process.kill(pid, 'SIGKILL');
+    stoppedPid = undefined;
+    const recoveredWindow = desktop.waitForEvent('window');
+    await desktop.evaluate(({ BrowserWindow }) => {
+      const contents = BrowserWindow.getAllWindows()[0].webContents;
+      process.kill(contents.getOSProcessId(), 'SIGKILL');
+    });
+    page = await recoveredWindow;
+    await page.waitForLoadState('domcontentloaded');
+    await resumeFromLibrary(page);
+    await expect(page.getByRole('region', { name: 'File conflict' })).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).toContainText(
+      'Recovered human text',
+    );
+    expect(await readFile(join(folder, 'main.tex'), 'utf8')).toBe('External while stopped');
+    await desktop.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().forEach((window) => window.destroy()),
+    );
+    await desktop.close();
+    await launchDesktop();
+    await expect(page.getByRole('region', { name: 'File conflict' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).toContainText(
+      'Recovered human text',
+    );
+    expect(await readFile(join(folder, 'main.tex'), 'utf8')).toBe('External while stopped');
+    await page.getByRole('button', { name: 'Keep local text' }).click();
+    await expect
+      .poll(() => readFile(join(folder, 'main.tex'), 'utf8'))
+      .toBe('Recovered human text');
+  },
+);
 
 test('native project creation and ZIP import preserve ordinary source and assets', async () => {
   const created = join(userData, 'created-project');

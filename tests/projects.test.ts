@@ -514,8 +514,20 @@ describe('ordinary projects and persistence', () => {
     await service.open(root);
     await service.command({ type: 'load', fileId: service.snapshot().files[0].id });
     expect(service.snapshot().preferences).toBe('{"font":14}');
+    const source = await readFile(join(root, 'main.tex'));
     store.db.exec('PRAGMA user_version=99');
+    const metadata = () => ({
+      version: store.db.prepare('PRAGMA user_version').get(),
+      schema: store.db.prepare('SELECT * FROM sqlite_schema ORDER BY name').all(),
+      projects: store.db.prepare('SELECT * FROM projects ORDER BY path').all(),
+      preferences: store.db.prepare('SELECT * FROM preferences ORDER BY key').all(),
+      library: store.db.prepare('SELECT * FROM project_library ORDER BY path').all(),
+      files: store.db.prepare('SELECT * FROM file_index ORDER BY project,id').all(),
+    });
+    const retained = metadata();
     expect(() => new MetadataStore(join(dir, 'data'))).toThrow('newer');
+    expect(metadata()).toEqual(retained);
+    expect(await readFile(join(root, 'main.tex'))).toEqual(source);
   });
 });
 it('reconciliation refuses overlap, handles inserts and leaves compatible changes', () => {

@@ -60,7 +60,7 @@ async function dimensions(width: number, height: number) {
     .poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight })))
     .toEqual({ width, height });
 }
-async function launchElectron() {
+async function launchElectron(executablePath?: string) {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string',
@@ -70,7 +70,10 @@ async function launchElectron() {
   delete env.ELECTRON_RENDERER_URL;
   app = await _electron.launch({
     chromiumSandbox: true,
-    ...electronLaunchOptions(process.env, [`--user-data-dir=${join(directory, 'data')}`]),
+    ...electronLaunchOptions(
+      executablePath ? { ...process.env, LOOM_E2E_EXECUTABLE: executablePath } : process.env,
+      [`--user-data-dir=${join(directory, 'data')}`],
+    ),
     env,
   });
   page = await app.firstWindow();
@@ -164,7 +167,7 @@ function processTreeCpuTicks(pid: number): number {
     }
   }, 0);
 }
-test.beforeEach(async () => {
+test.beforeEach(async ({}, testInfo) => {
   directory = await mkdtemp(join(tmpdir(), 'loom-agent-e2e-'));
   root = join(directory, 'paper');
   await mkdir(root);
@@ -513,7 +516,9 @@ test.beforeEach(async () => {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('fixture address');
   endpoint = `http://127.0.0.1:${address.port}`;
-  await launchElectron();
+  await launchElectron(
+    testInfo.tags.includes('@upgrade') ? process.env.LOOM_E2E_UPGRADE_FROM : undefined,
+  );
   await stubNativeOpenDialog([root]);
   await page
     .getByRole('button', { name: /^(Open or create project|More options)$/, exact: true })
@@ -1913,91 +1918,107 @@ test('new conversation remains available while disconnected and continues after 
   ).toBeVisible();
 });
 
-test('chat titles stay compact and custom names persist after rename, continuation and restart', async () => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await connect();
-  const prompt =
-    'Show markdown rendering. Review the literature, organize citations and summarize the scientific evidence for this manuscript.';
-  await page.getByRole('textbox', { name: 'Ask about your paper' }).fill(prompt);
-  await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
-  await expect(page.locator('.agent-message-harness')).toBeVisible();
-  await page.getByRole('button', { name: 'Chats', exact: true }).click();
-  let title = page.locator('.agent-chat-title');
-  await expect(title).toHaveText(prompt.slice(0, 80));
-  const geometry = await title.evaluate((element) => ({
-    height: element.clientHeight,
-    lineHeight: parseFloat(getComputedStyle(element).lineHeight),
-    contentHeight: element.scrollHeight,
-    clamp: getComputedStyle(element).webkitLineClamp,
-  }));
-  expect(geometry.clamp).toBe('2');
-  expect(geometry.height).toBeLessThanOrEqual(geometry.lineHeight * 2 + 1);
-  expect(geometry.contentHeight).toBeGreaterThan(geometry.height);
-  await expect(title).toHaveAttribute('title', prompt.slice(0, 80));
-  let rename = page.getByRole('button', { name: /^Rename conversation / });
-  await expect(rename).toBeEnabled();
-  await rename.focus();
-  await page.keyboard.press('Enter');
-  let modal = page.getByRole('dialog', { name: 'Rename conversation', exact: true });
-  let input = modal.getByLabel('Chat name', { exact: true });
-  await expect(input).toBeFocused();
-  await input.fill('   ');
-  await modal.getByRole('button', { name: 'Save name', exact: true }).click();
-  await expect(modal.getByRole('alert')).toContainText('1 and 300');
-  await expect(input).toBeFocused();
-  await input.fill('Cancelled name');
-  await page.keyboard.press('Escape');
-  await expect(modal).toBeHidden();
-  await expect(rename).toBeFocused();
-  await expect(title).toHaveText(prompt.slice(0, 80));
-  await page.screenshot({
-    path: resolve('artifacts/chat-titles-compact.png'),
-    animations: 'disabled',
-  });
-  await rename.click();
-  await input.fill('  Literature review  ');
-  await input.press('Enter');
-  await expect(modal).toBeHidden();
-  await expect(title).toHaveText('Literature review');
-  await expect(rename).toBeFocused();
-  await restartElectron();
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  title = page.locator('.agent-chat-title');
-  rename = page.getByRole('button', { name: /^Rename conversation / });
-  modal = page.getByRole('dialog', { name: 'Rename conversation', exact: true });
-  input = modal.getByLabel('Chat name', { exact: true });
-  await page.getByRole('button', { name: 'Chats', exact: true }).click();
-  await expect(title).toHaveText('Literature review');
-  // A deliberate name matching the default must also survive the next message.
-  await rename.click();
-  await input.fill('New conversation');
-  await input.press('Enter');
-  await expect(modal).toBeHidden();
-  await page.getByRole('button', { name: 'Files', exact: true }).click();
-  await connect();
-  await page
-    .getByRole('textbox', { name: 'Ask about your paper' })
-    .fill('Show markdown rendering.');
-  await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Send to agent', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Chats', exact: true }).click();
-  await expect(title).toHaveText('New conversation');
-  await expect(rename).toBeEnabled();
-  await dimensions(720, 540);
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
-  await page
-    .getByRole('dialog', { name: 'Project files', exact: true })
-    .getByRole('button', { name: 'Chats', exact: true })
-    .click();
-  await rename.click();
-  await expect(input).toBeVisible();
-  await page.screenshot({
-    path: resolve('artifacts/chat-rename-small.png'),
-    animations: 'disabled',
-  });
-  await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(modal).toBeHidden();
-});
+test(
+  'chat titles stay compact and custom names persist after rename, continuation and restart',
+  { tag: '@upgrade' },
+  async () => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await connect();
+    const prompt =
+      'Show markdown rendering. Review the literature, organize citations and summarize the scientific evidence for this manuscript.';
+    await page.getByRole('textbox', { name: 'Ask about your paper' }).fill(prompt);
+    await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
+    await expect(page.locator('.agent-message-harness')).toBeVisible();
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    let title = page.locator('.agent-chat-title');
+    await expect(title).toHaveText(prompt.slice(0, 80));
+    const geometry = await title.evaluate((element) => ({
+      height: element.clientHeight,
+      lineHeight: parseFloat(getComputedStyle(element).lineHeight),
+      contentHeight: element.scrollHeight,
+      clamp: getComputedStyle(element).webkitLineClamp,
+    }));
+    expect(geometry.clamp).toBe('2');
+    expect(geometry.height).toBeLessThanOrEqual(geometry.lineHeight * 2 + 1);
+    expect(geometry.contentHeight).toBeGreaterThan(geometry.height);
+    await expect(title).toHaveAttribute('title', prompt.slice(0, 80));
+    let rename = page.getByRole('button', { name: /^Rename conversation / });
+    await expect(rename).toBeEnabled();
+    await rename.focus();
+    await page.keyboard.press('Enter');
+    let modal = page.getByRole('dialog', { name: 'Rename conversation', exact: true });
+    let input = modal.getByLabel('Chat name', { exact: true });
+    await expect(input).toBeFocused();
+    await input.fill('   ');
+    await modal.getByRole('button', { name: 'Save name', exact: true }).click();
+    await expect(modal.getByRole('alert')).toContainText('1 and 300');
+    await expect(input).toBeFocused();
+    await input.fill('Cancelled name');
+    await page.keyboard.press('Escape');
+    await expect(modal).toBeHidden();
+    await expect(rename).toBeFocused();
+    await expect(title).toHaveText(prompt.slice(0, 80));
+    await page.screenshot({
+      path: resolve('artifacts/chat-titles-compact.png'),
+      animations: 'disabled',
+    });
+    await rename.click();
+    await input.fill('  Literature review  ');
+    await input.press('Enter');
+    await expect(modal).toBeHidden();
+    await expect(title).toHaveText('Literature review');
+    await expect(rename).toBeFocused();
+    const messages = page.locator('.agent-message-user, .agent-message-harness');
+    await expect(page.locator('.agent-message-user')).toContainText(prompt);
+    await expect(page.locator('.agent-message-harness')).toContainText('Research update');
+    const retainedConversation = await messages.allTextContents();
+    const submissions = requestBodies.filter((request) => request.path.endsWith('/prompt')).length;
+    await restartElectron();
+    await page.getByRole('button', { name: 'Show conversation', exact: true }).click();
+    await expect(page.locator('.agent-message-user, .agent-message-harness')).toHaveText(
+      retainedConversation,
+    );
+    expect(requestBodies.filter((request) => request.path.endsWith('/prompt'))).toHaveLength(
+      submissions,
+    );
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    title = page.locator('.agent-chat-title');
+    rename = page.getByRole('button', { name: /^Rename conversation / });
+    modal = page.getByRole('dialog', { name: 'Rename conversation', exact: true });
+    input = modal.getByLabel('Chat name', { exact: true });
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await expect(title).toHaveText('Literature review');
+    // A deliberate name matching the default must also survive the next message.
+    await rename.click();
+    await input.fill('New conversation');
+    await input.press('Enter');
+    await expect(modal).toBeHidden();
+    await page.getByRole('button', { name: 'Files', exact: true }).click();
+    await connect();
+    await page
+      .getByRole('textbox', { name: 'Ask about your paper' })
+      .fill('Show markdown rendering.');
+    await page.getByRole('button', { name: 'Send to agent', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Send to agent', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await expect(title).toHaveText('New conversation');
+    await expect(rename).toBeEnabled();
+    await dimensions(720, 540);
+    await page.getByRole('button', { name: 'Project', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'Project files', exact: true })
+      .getByRole('button', { name: 'Chats', exact: true })
+      .click();
+    await rename.click();
+    await expect(input).toBeVisible();
+    await page.screenshot({
+      path: resolve('artifacts/chat-rename-small.png'),
+      animations: 'disabled',
+    });
+    await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(modal).toBeHidden();
+  },
+);
 
 test('Chats deletion can be cancelled and remains deleted after an Electron restart', async () => {
   const title = 'A conversation for deletion.';
