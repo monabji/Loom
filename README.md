@@ -13,7 +13,7 @@ Write your paper, manage references, and preview the PDF in one desktop workspac
 
 Your project is an ordinary folder of `.tex`, `.bib`, and asset files. You can use the same files with other editors and collaborate through Git.
 
-## Work on your paper
+## Standout Features : 
 
 - Edit multi-file LaTeX projects, compile PDFs with `latexmk`, and move between source and preview with SyncTeX.
 - Search arXiv, your bibliography, or an enabled local Zotero library. Insert citations and edit BibTeX files alongside your paper.
