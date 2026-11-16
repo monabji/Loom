@@ -1,10 +1,11 @@
+import { syncDirectory } from '../../domain/sync-directory';
 import { diffLines } from 'diff';
 import { z } from 'zod';
 import { agentTurnSchema } from '../../contracts/agent';
 import { relativePath } from '../../contracts/project';
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import type { AgentTurn, AgentChange } from '../../contracts/agent';
 import { ProjectService } from '../project/projects';
 import { reconcile } from '../project/reconcile';
@@ -112,14 +113,9 @@ export class AgentChanges {
       } finally {
         await handle.close();
       }
-      index[path] = join(id, name, key);
+      index[path] = posix.join(id, name, key);
     }
-    const handle = await fs.open(folder, 'r');
-    try {
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
+    await syncDirectory(folder);
     return index;
   }
   async begin(

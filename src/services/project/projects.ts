@@ -1,3 +1,4 @@
+import { syncDirectory } from '../../domain/sync-directory';
 import {
   defaultBuildSettings,
   portableBuildSchema,
@@ -348,12 +349,7 @@ export class ProjectService {
       await file.close();
       file = undefined;
       await fs.link(temporary, target);
-      const directory = await fs.open(this.root, 'r');
-      try {
-        await directory.sync();
-      } finally {
-        await directory.close();
-      }
+      await syncDirectory(this.root);
     } finally {
       await file?.close();
       await fs.rm(temporary, { force: true });
@@ -605,12 +601,7 @@ export class ProjectService {
         /* New file. */
       }
       await fs.rename(temp, target);
-      const dir = await fs.open(dirname(target), 'r');
-      try {
-        await dir.sync();
-      } finally {
-        await dir.close();
-      }
+      await syncDirectory(dirname(target));
       delete file.overrideHash;
       file.diskKind = 'text';
       file.diskRevision = hash(text);
@@ -850,12 +841,7 @@ export class ProjectService {
         await handle.close();
       }
       await fs.link(temporary, target);
-      const folder = await fs.open(dirname(target), 'r');
-      try {
-        await folder.sync();
-      } finally {
-        await folder.close();
-      }
+      await syncDirectory(dirname(target));
     } finally {
       await fs.rm(temporary, { force: true });
     }
@@ -969,12 +955,7 @@ export class ProjectService {
           if (!latest.equals(current))
             throw new Error('This file changed again. Review before reverting.');
           await fs.rename(temp, target);
-          const directory = await fs.open(dirname(target), 'r');
-          try {
-            await directory.sync();
-          } finally {
-            await directory.close();
-          }
+          await syncDirectory(dirname(target));
         } finally {
           await fs.rm(temp, { force: true });
         }

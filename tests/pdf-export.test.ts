@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { writePdfExport } from '../src/main/pdf-export';
+import { createTestSymlink } from './helpers/symlink';
 let directory: string;
 beforeEach(async () => {
   directory = await fs.mkdtemp(join(tmpdir(), 'loom-pdf-export-'));
@@ -23,11 +24,17 @@ it('exports atomically while protecting manuscript inputs and linked destination
   await expect(
     writePdfExport(join(directory, 'project/figure.pdf'), pdf, project()),
   ).rejects.toThrow('project input');
-  await fs.symlink(join(directory, 'project/main.tex'), join(directory, 'linked.pdf'));
-  await expect(writePdfExport(join(directory, 'linked.pdf'), pdf, project())).rejects.toThrow(
-    'symbolic link',
-  );
-  await fs.symlink(join(directory, 'project'), join(directory, 'linked-directory'));
+  if (await createTestSymlink(join(directory, 'project/main.tex'), join(directory, 'linked.pdf')))
+    await expect(writePdfExport(join(directory, 'linked.pdf'), pdf, project())).rejects.toThrow(
+      'symbolic link',
+    );
+  expect(
+    await createTestSymlink(
+      join(directory, 'project'),
+      join(directory, 'linked-directory'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    ),
+  ).toBe(true);
   await expect(
     writePdfExport(join(directory, 'linked-directory/figure.pdf'), pdf, project()),
   ).rejects.toThrow('project input');

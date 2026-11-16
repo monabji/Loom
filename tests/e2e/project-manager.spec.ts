@@ -34,8 +34,10 @@ async function size(width: number, height: number) {
       const [ow, oh] = w.getSize(),
         [cw, ch] = w.getContentSize();
       w.setMaximumSize(0, 0);
-      w.setMinimumSize(width + ow - cw, height + oh - ch);
-      w.setMaximumSize(width + ow - cw, height + oh - ch);
+      if (process.platform !== 'win32') {
+        w.setMinimumSize(width + ow - cw, height + oh - ch);
+        w.setMaximumSize(width + ow - cw, height + oh - ch);
+      }
       w.setContentSize(width, height);
     },
     { width, height },
@@ -54,9 +56,12 @@ async function create(name: string) {
 }
 async function library() {
   await page.getByRole('button', { name: 'Back to projects', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Your projects', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your projects', exact: true })).toBeVisible({
+    timeout: 35000,
+  });
 }
 test.beforeEach(async () => {
+  test.setTimeout(120000);
   dir = await mkdtemp(join(tmpdir(), 'loom-manager-'));
   await launch();
   await size(1440, 900);
@@ -66,7 +71,7 @@ test.afterEach(async () => {
     ?.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.destroy()))
     .catch(() => {});
   await app?.close();
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 test('startup library creates and reopens projects with isolated text, preferences, draft and device appearance after full restart', async () => {
   await size(1440, 900);

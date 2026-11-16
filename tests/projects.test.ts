@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, readFile, writeFile, rename, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,7 @@ import { zipSync, strToU8 } from 'fflate';
 import { MetadataStore } from '../src/services/project/store';
 import { ProjectService } from '../src/services/project/projects';
 import { reconcile } from '../src/services/project/reconcile';
+import { createTestSymlink } from './helpers/symlink';
 import { projectCommandSchema } from '../src/contracts/project';
 let dir: string, root: string, store: MetadataStore, service: ProjectService;
 beforeEach(async () => {
@@ -339,7 +340,13 @@ describe('ordinary projects and persistence', () => {
     );
     await expect(service.createFile(join(root, 'main.tex'), projectId)).rejects.toThrow();
     expect(await readFile(join(root, 'main.tex'), 'utf8')).toBe('alpha\nbeta\ngamma\n');
-    await symlink(dir, join(root, 'linked'));
+    expect(
+      await createTestSymlink(
+        dir,
+        join(root, 'linked'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      ),
+    ).toBe(true);
     await expect(service.createFile(join(root, 'linked', 'escape.tex'), projectId)).rejects.toThrow(
       'Symbolic links',
     );
@@ -442,7 +449,13 @@ describe('ordinary projects and persistence', () => {
     expect(projectCommandSchema.safeParse({ type: 'create', path: '../escape' }).success).toBe(
       false,
     );
-    await symlink(dir, join(root, 'escape'));
+    expect(
+      await createTestSymlink(
+        dir,
+        join(root, 'escape'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      ),
+    ).toBe(true);
     await expect(service.command({ type: 'create', path: 'escape/stolen' })).rejects.toThrow(
       'Symbolic',
     );

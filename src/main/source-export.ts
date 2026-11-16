@@ -1,3 +1,4 @@
+import { syncDirectory } from '../domain/sync-directory';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, relative, resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -35,12 +36,7 @@ export async function writeSourceExport(
       await handle.close();
     }
     await fs.rename(temp, target);
-    const folder = await fs.open(directory, 'r');
-    try {
-      await folder.sync();
-    } finally {
-      await folder.close();
-    }
+    await syncDirectory(directory);
   } finally {
     await fs.rm(temp, { force: true });
   }
