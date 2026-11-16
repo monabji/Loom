@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -7,12 +7,12 @@ import { MetadataStore } from '../src/services/project/store';
 import { BuildService } from '../src/services/latex/builds';
 import { compilerDiagnostics } from '../src/services/latex/diagnostics';
 import { latexCommandSchema } from '../src/contracts/latex';
-import { runTool } from '../src/services/latex/tools';
+import * as tools from '../src/services/latex/tools';
+import { toolNames } from '../src/contracts/latex';
 import { projectStructure } from '../src/services/latex/language';
 let directory: string, projects: ProjectService, builds: BuildService, store: MetadataStore;
-const originalPath = process.env.PATH;
-const originalTexPath = process.env.LOOM_TEX_PATH;
 beforeEach(async () => {
+  vi.spyOn(tools, 'detectTools').mockResolvedValue([]);
   directory = await mkdtemp(join(tmpdir(), 'loom-build-'));
   const root = join(directory, 'paper with spaces');
   await mkdir(root);
@@ -34,26 +34,41 @@ afterEach(async () => {
   builds.dispose();
   await builds.idle(projects.snapshot().id);
   store.close();
-  process.env.PATH = originalPath;
-  if (originalTexPath === undefined) delete process.env.LOOM_TEX_PATH;
-  else process.env.LOOM_TEX_PATH = originalTexPath;
+  vi.restoreAllMocks();
   await rm(directory, { recursive: true, force: true });
 });
-async function fakeTools() {
-  const bin = join(directory, 'bin');
-  await mkdir(bin);
-  const code = `#!${process.execPath}\nconst fs=require('fs'),path=require('path');
-if(process.argv.includes('--version')||process.argv.includes('-v')){console.log('synthetic tool 1');process.exit(0)}
-const out=process.argv.find(x=>x.startsWith('-outdir=')).slice(8);
-const input=fs.readFileSync('sections/body.tex','utf8');
-setTimeout(()=>{ if(input.includes('FAIL')){console.log('sections/body.tex:2: Undefined control sequence.');process.exit(1)} fs.writeFileSync(path.join(out,'main.pdf'),'%PDF-1.7\\n'+input);if(!input.includes('NO_MAP'))fs.writeFileSync(path.join(out,'main.synctex.gz'),'synthetic mapping');console.log('synthetic successful run');},input.includes('SLOW')?500:50);`;
-  for (const tool of ['latexmk', 'pdflatex', 'xelatex', 'lualatex', 'bibtex', 'biber'])
-    await writeFile(join(bin, tool), code, { mode: 0o755 });
-  process.env.PATH = bin + ':' + originalPath;
+function fakeTools() {
+  vi.mocked(tools.detectTools).mockResolvedValue(
+    toolNames.map((name) => ({
+      name,
+      executable: name,
+      available: true,
+      version: 'synthetic tool 1',
+    })),
+  );
+  vi.spyOn(tools, 'runTool').mockImplementation(async (_executable, args, options) => {
+    const cwd = options?.cwd;
+    const out = args.find((arg) => arg.startsWith('-outdir='))?.slice(8);
+    if (!cwd || !out) throw new Error('Missing synthetic compiler input or output directory.');
+    const input = await readFile(join(cwd, 'sections/body.tex'), 'utf8');
+    if (input.includes('FAIL')) {
+      const stderr = 'sections/body.tex:2: Undefined control sequence.';
+      options.onOutput?.(stderr);
+      return { code: 1, output: stderr, stdout: '', stderr };
+    }
+    await new Promise((resolve) => setTimeout(resolve, input.includes('SLOW') ? 500 : 50));
+    if (options.signal?.aborted) return { code: 130, output: '', stdout: '', stderr: '' };
+    await writeFile(join(out, 'main.pdf'), '%PDF-1.7\n' + input);
+    if (!input.includes('NO_MAP'))
+      await writeFile(join(out, 'main.synctex.gz'), 'synthetic mapping');
+    const stdout = 'synthetic successful run';
+    options.onOutput?.(stdout);
+    return { code: 0, output: stdout, stdout, stderr: '' };
+  });
 }
-describe('snapshot build scheduler (synthetic native tools)', () => {
+describe('snapshot build scheduler (synthetic compiler)', () => {
   it('keeps a stable snapshot, includes binary inputs in freshness and retains success on failure', async () => {
-    await fakeTools();
+    fakeTools();
     const id = projects.snapshot().id;
     await writeFile(join(directory, 'paper with spaces', 'asset.bin'), Buffer.from([0, 1, 2]));
     await projects.refresh();
@@ -83,7 +98,7 @@ describe('snapshot build scheduler (synthetic native tools)', () => {
     expect((await reopened.status(id)).successful?.id).toBe(first.successful?.id);
   });
   it('coalesces pending requests, saves continue during compilation, cancellation drops pending intent', async () => {
-    await fakeTools();
+    fakeTools();
     const id = projects.snapshot().id;
     await writeFile(join(directory, 'paper with spaces', 'sections/body.tex'), 'SLOW');
     await projects.refresh();
@@ -107,7 +122,7 @@ describe('snapshot build scheduler (synthetic native tools)', () => {
     expect(cancelled.successful).not.toBeNull();
   });
   it('records a queued build failure if the selected root is deleted during compilation', async () => {
-    await fakeTools();
+    fakeTools();
     const id = projects.snapshot().id;
     await writeFile(join(directory, 'paper with spaces', 'sections/body.tex'), 'SLOW');
     await projects.refresh();
@@ -120,7 +135,7 @@ describe('snapshot build scheduler (synthetic native tools)', () => {
     expect((await builds.status(id)).current?.log).toContain('root');
   });
   it('rejects mismatched bibliography choices and writes portable settings only explicitly', async () => {
-    await fakeTools();
+    fakeTools();
     const id = projects.snapshot().id;
     await expect(
       readFile(join(directory, 'paper with spaces', 'loom.build.json')),
@@ -156,7 +171,7 @@ describe('snapshot build scheduler (synthetic native tools)', () => {
     secondStore.close();
   });
   it('reloads external portable root/settings and rejects malformed configuration before building', async () => {
-    await fakeTools();
+    fakeTools();
     const id = projects.snapshot().id;
     await builds.settings(id, {
       engine: 'pdflatex',
@@ -238,7 +253,7 @@ describe('snapshot build scheduler (synthetic native tools)', () => {
     expect(projects.buildContext(id).configError).toContain('missing-root');
   });
   it('provides an explicit fallback when a successful output has no source map', async () => {
-    await fakeTools();
+    fakeTools();
     const id = projects.snapshot().id;
     await writeFile(join(directory, 'paper with spaces', 'sections/body.tex'), 'NO_MAP');
     await projects.refresh();
@@ -258,19 +273,16 @@ describe('snapshot build scheduler (synthetic native tools)', () => {
     ).rejects.toThrow('no SyncTeX mapping');
   });
   it('recovers a missing-tool build after installation without restarting the service', async () => {
-    process.env.LOOM_TEX_PATH = join(directory, 'not-installed');
     const id = projects.snapshot().id;
     builds.request(id, false);
     await builds.idle(id);
     expect((await builds.status(id)).current?.log).toContain('Missing tools:');
-    await fakeTools();
-    process.env.LOOM_TEX_PATH = join(directory, 'bin');
+    fakeTools();
     builds.request(id, false);
     await builds.idle(id);
     expect((await builds.status(id)).successful).not.toBeNull();
   });
   it('reports missing tools and ambiguous roots without modifying the project', async () => {
-    process.env.LOOM_TEX_PATH = join(directory, 'missing');
     const id = projects.snapshot().id;
     builds.request(id, false);
     await builds.idle(id);
@@ -288,7 +300,7 @@ describe('snapshot build scheduler (synthetic native tools)', () => {
     expect(() => builds.request(projects.snapshot().id, false)).toThrow('root');
   });
   it('refuses conflicts, rejects cross-project artifact access and exposes literal structure', async () => {
-    await fakeTools();
+    fakeTools();
     const id = projects.snapshot().id;
     expect(projectStructure(projects.buildContext(id))).toEqual(
       expect.arrayContaining([
@@ -327,7 +339,7 @@ it('validates only named commands and maps logs without escaping snapshot paths'
 });
 it('terminates an actual native process group on cancellation', async () => {
   const abort = new AbortController();
-  const result = runTool(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {
+  const result = tools.runTool(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {
     signal: abort.signal,
   });
   setTimeout(() => abort.abort(), 100);

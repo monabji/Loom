@@ -13,7 +13,7 @@ Write your paper, manage references, and preview the PDF in one desktop workspac
 
 Your project is an ordinary folder of `.tex`, `.bib`, and asset files. You can use the same files with other editors and collaborate through Git.
 
-## Standout Features : 
+## Standout Features :
 
 - Edit multi-file LaTeX projects, compile PDFs with `latexmk`, and move between source and preview with SyncTeX.
 - Search arXiv, your bibliography, or an enabled local Zotero library. Insert citations and edit BibTeX files alongside your paper.
@@ -40,6 +40,12 @@ chmod u+x Loom-0.1.0.AppImage
 
 Confirm that the checksum reports `OK` before launching. The AppImage needs FUSE support.
 
+### Build the Windows installer
+
+On Windows x64, install the source dependencies below and run `npm.cmd run package:windows`. The installer is written to `release/Loom-<version>-Windows-x64-Setup.msi`. A PC that enforces Application Control needs a build signed or approved under its policy.
+
+Windows x64 source workflows were exercised, including editing, PDF compilation, save/restart, and Git unit tests. The MSI installed, but Windows Application Control blocked the unsigned app from launching on the verification PC; this does not count as a verified Windows desktop release. To run it on a managed PC, use a release signed with a trusted code-signing certificate or ask the administrator to approve the verified publisher/build under the organization's policy. Do not disable or bypass Application Control. Git desktop integration and live agent sign-in were not verified on Windows.
+
 ### Run from source
 
 Install Git, Node.js, and npm 11 or newer. Supported Node.js versions are `^22.12.0`, `^24.0.0`, or `>=26.0.0`. To match CI, use Node.js 26.7.0 and npm 11.19.0.
@@ -59,13 +65,13 @@ Choose **Create project**, **Open folder**, or **Try a sample paper**. You can e
 
 To compile PDFs, install LaTeX with `latexmk` and an engine such as `pdflatex`, `xelatex`, or `lualatex`. SyncTeX enables source navigation, BibTeX or Biber handles bibliographies, and TexLab provides language features.
 
-If you cloned the repository, you can install the LaTeX tools on Linux x86_64 with:
+If you cloned the repository, you can install the LaTeX tools on Linux or Windows x64 with:
 
 ```sh
 npm run setup:latex
 ```
 
-The [setup script](scripts/setup-latex.mjs) downloads TinyTeX and TexLab into your home directory and preserves existing installations. Git features require a separate Git installation.
+The [setup script](scripts/setup-latex.mjs) installs TinyTeX and TexLab for the current user and preserves an existing Loom toolchain. On Windows, Loom discovers the tools in `%LOCALAPPDATA%\LoomToolchain`. Git features require a separate Git installation.
 
 ### Connect an agent
 

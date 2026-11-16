@@ -51,11 +51,11 @@ async function openExample(name = 'multi-file') {
     .getByRole('dialog', { name: 'Projects', exact: true })
     .getByRole('button', { name: 'Open folder', exact: true })
     .click();
-  await expect(page.locator('.cm-content')).toBeVisible();
+  await expect(page.locator('.cm-content')).toBeVisible({ timeout: 20000 });
   await expect(page.getByRole('dialog', { name: 'Projects', exact: true })).not.toBeVisible();
 }
 async function waitPdf() {
-  await expect(page.locator('.build-status')).toHaveText('PDF ready', { timeout: 25000 });
+  await expect(page.locator('.build-status')).toHaveText('PDF ready', { timeout: 60000 });
   await expect
     .poll(() =>
       page.locator('.pdf-sheet canvas').evaluate((canvas: HTMLCanvasElement) => canvas.width),
@@ -71,14 +71,17 @@ async function dimensions(width: number, height: number) {
       const [ow, oh] = window.getSize(),
         [cw, ch] = window.getContentSize();
       window.setMaximumSize(0, 0);
-      window.setMinimumSize(size.width + ow - cw, size.height + oh - ch);
-      window.setMaximumSize(size.width + ow - cw, size.height + oh - ch);
+      if (process.platform !== 'win32') {
+        window.setMinimumSize(size.width + ow - cw, size.height + oh - ch);
+        window.setMaximumSize(size.width + ow - cw, size.height + oh - ch);
+      }
       window.setContentSize(size.width, size.height);
     },
     { width, height },
   );
 }
 test.beforeEach(async () => {
+  test.setTimeout(120000);
   directory = await mkdtemp(join(tmpdir(), 'loom-latex-e2e-'));
   await launch();
 });
@@ -91,7 +94,7 @@ test.afterEach(async () => {
       .catch(() => {});
     await app.close();
   }
-  await rm(directory, { recursive: true, force: true });
+  await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
 test('static branding and dismissible PDF guidance survive polling and show new failures', async () => {
@@ -535,6 +538,7 @@ test.describe('live Phase 3 Electron workflow', () => {
     );
   });
   test('cancels a real long TeX process and recovers an interrupted utility without orphan tools', async () => {
+    test.skip(process.platform !== 'linux', 'Process ownership inspection uses Linux ps.');
     test.setTimeout(60000);
     await dimensions(1440, 960);
     await openExample();

@@ -24,6 +24,7 @@
     "build": "electron-vite build",
     "package": "npm run build && electron-builder --linux dir",
     "package:appimage": "npm run build && electron-builder --linux AppImage",
+    "package:windows": "npm run build && electron-builder --win msi --x64 --publish never",
     "try:phase3": "node scripts/try-phase-3.mjs",
     "try:phase7": "node scripts/try-phase-7.mjs",
     "workload:phase8": "node scripts/phase-8-workload.mjs",
@@ -82,6 +83,10 @@
       "category": "Office",
       "executableName": "loom",
       "syncDesktopName": true
+    },
+    "win": {
+      "icon": "design/brand/loom-app-icon.png",
+      "artifactName": "Loom-${version}-Windows-${arch}-Setup.${ext}"
     },
     "extraResources": [
       {

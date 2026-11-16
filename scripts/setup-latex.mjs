@@ -1,4 +1,4 @@
-// Installs the full official TeX bundle and TexLab without admin access or shell-profile edits.
+// Installs official TinyTeX and TexLab releases in the current user's directory.
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { access, mkdir, mkdtemp, rename, rm, chmod, cp } from 'node:fs/promises';
@@ -7,9 +7,10 @@ import { join, delimiter, isAbsolute } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { execFileSync } from 'node:child_process';
 
-if (process.platform !== 'linux' || process.arch !== 'x64') {
+const windows = process.platform === 'win32';
+if ((!windows && process.platform !== 'linux') || process.arch !== 'x64') {
   throw new Error(
-    'This setup supports Linux x86_64. Install TeX Live and TexLab for your platform.',
+    'This setup supports Linux and Windows x64. Install TeX Live and TexLab for your platform.',
   );
 }
 const exists = async (path) =>
@@ -17,7 +18,16 @@ const exists = async (path) =>
     () => true,
     () => false,
   );
-const work = await mkdtemp(join(homedir(), '.loom-latex-setup-'));
+const localAppData = process.env.LOCALAPPDATA;
+const installRoot = windows
+  ? join(
+      localAppData && isAbsolute(localAppData) ? localAppData : join(homedir(), 'AppData', 'Local'),
+      'LoomToolchain',
+    )
+  : homedir();
+await mkdir(installRoot, { recursive: true });
+const work = await mkdtemp(join(installRoot, '.loom-latex-setup-'));
+const texTools = ['latexmk', 'pdflatex', 'xelatex', 'lualatex', 'bibtex', 'biber', 'synctex'];
 async function asset(repository, tag, name) {
   const response = await fetch(`https://api.github.com/repos/${repository}/releases/${tag}`);
   if (!response.ok) throw new Error(`Cannot read official release: ${response.status}`);
@@ -40,7 +50,81 @@ async function archive(item, local) {
   console.log(`Verified ${item.name}`);
   return path;
 }
-try {
+async function setupWindows() {
+  const tex = join(installRoot, 'TinyTeX');
+  const texlab = join(installRoot, 'texlab');
+  const system = join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+  const tar = join(system, 'tar.exe');
+  async function install(repository, tag, name, target, source, check, local) {
+    if (await exists(target)) {
+      console.log(`Preserving existing installation at ${target}`);
+      await check(target, false);
+      return;
+    }
+    const path = await archive(await asset(repository, tag, name), local);
+    const staging = await mkdtemp(join(work, 'extract-'));
+    execFileSync(tar, ['-xf', path, '-C', staging], { stdio: 'inherit', windowsHide: true });
+    const extracted = join(staging, source);
+    await check(extracted, true);
+    if (await exists(target))
+      throw new Error(`An installation appeared during setup and was preserved at ${target}.`);
+    await rename(extracted, target);
+  }
+  async function checkTex(root, staged) {
+    const engineBin = join(root, 'bin', 'windows');
+    const env = { ...process.env, PATH: [engineBin, process.env.PATH ?? ''].join(delimiter) };
+    if (staged && !(await exists(join(engineBin, 'synctex.exe')))) {
+      // TinyTeX omits the standalone SyncTeX command. Use the package manager
+      // only on the fresh staging copy, preserving an existing installation.
+      const cmd = join(system, 'cmd.exe');
+      const options = { cwd: engineBin, env, stdio: 'inherit', windowsHide: true };
+      const repo = 'https://tlnet.yihui.org';
+      execFileSync(
+        cmd,
+        ['/d', '/c', 'tlmgr.bat', '--repository', repo, 'update', '--self'],
+        options,
+      );
+      execFileSync(
+        cmd,
+        ['/d', '/c', 'tlmgr.bat', '--repository', repo, 'install', 'synctex'],
+        options,
+      );
+    }
+    for (const tool of texTools) {
+      const executable = join(engineBin, tool + '.exe');
+      if (!(await exists(executable)))
+        throw new Error(`Required tool is missing at ${executable}.`);
+      execFileSync(
+        executable,
+        [tool === 'latexmk' ? '-v' : tool === 'synctex' ? 'help' : '--version'],
+        { env, stdio: 'inherit', windowsHide: true },
+      );
+    }
+  }
+  function checkTexLab(root) {
+    execFileSync(join(root, 'texlab.exe'), ['--version'], { stdio: 'inherit', windowsHide: true });
+  }
+  await install(
+    'rstudio/tinytex-releases',
+    'tags/daily',
+    'TinyTeX-windows.exe',
+    tex,
+    'TinyTeX',
+    checkTex,
+    process.env.LOOM_TEX_ARCHIVE,
+  );
+  await install(
+    'latex-lsp/texlab',
+    'latest',
+    'texlab-x86_64-windows.zip',
+    texlab,
+    '.',
+    checkTexLab,
+  );
+  console.log('PDF tools are ready. Loom discovers these paths automatically.');
+}
+
+async function setupLinux() {
   const tex = join(homedir(), '.TinyTeX');
   if (!(await exists(tex))) {
     const release = await asset(
@@ -132,7 +216,7 @@ try {
         verbatimSymlinks: true,
       });
   }
-  for (const tool of ['latexmk', 'pdflatex', 'xelatex', 'lualatex', 'bibtex', 'biber', 'synctex']) {
+  for (const tool of texTools) {
     execFileSync(
       join(tex, 'bin/x86_64-linux', tool),
       [tool === 'latexmk' ? '-v' : tool === 'synctex' ? 'help' : '--version'],
@@ -141,6 +225,10 @@ try {
   }
   execFileSync(join(bin, 'texlab'), ['--version'], { stdio: 'inherit' });
   console.log('PDF tools are ready. Loom discovers these paths automatically.');
+}
+
+try {
+  await (windows ? setupWindows() : setupLinux());
 } finally {
-  await rm(work, { recursive: true, force: true });
+  await rm(work, { recursive: true, force: true, maxRetries: 3 });
 }

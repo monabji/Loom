@@ -5,15 +5,29 @@ import { homedir } from 'node:os';
 import { toolNames, type BuildState } from '../../contracts/latex';
 
 export type Tool = BuildState['tools'][number] & { executable: string | null };
-// The small supervisor owns the entire native process group. A separate, always
-// drained ownership pipe detects owner death even when tool stdin is backpressured.
+// A separate, always drained ownership pipe detects owner death even when tool
+// stdin is backpressured. The supervisor stops the tool and its children.
 const supervisor = `
-const {spawn}=require('node:child_process');
+const {execFile,spawn}=require('node:child_process');
 const {Socket}=require('node:net');
-const child=spawn(process.argv[1],process.argv.slice(2),{stdio:['pipe','pipe','pipe'],detached:process.platform!=='win32'});
+const {join}=require('node:path');
+const windows=process.platform==='win32';
+const child=spawn(process.argv[1],process.argv.slice(2),{stdio:['pipe','pipe','pipe'],detached:!windows,windowsHide:true});
 let ending=false;
-function kill(signal){try{if(process.platform==='win32')child.kill(signal);else process.kill(-child.pid,signal)}catch{}}
-function stop(){if(ending)return;ending=true;kill('SIGTERM');setTimeout(()=>kill('SIGKILL'),500).unref()}
+function killGroup(signal){try{process.kill(-child.pid,signal)}catch{}}
+function stop(){
+  if(ending || !child.pid)return;
+  ending=true;
+  if(windows){
+    const taskkill=join(process.env.SystemRoot || 'C:\\\\Windows','System32','taskkill.exe');
+    execFile(taskkill,['/pid',String(child.pid),'/t','/f'],{windowsHide:true},error=>{
+      if(error && child.exitCode===null && child.signalCode===null) child.kill();
+    });
+  }else{
+    killGroup('SIGTERM');
+    setTimeout(()=>killGroup('SIGKILL'),500).unref();
+  }
+}
 const owner=new Socket({fd:3,readable:true,writable:false});
 owner.on('end',stop);owner.on('error',stop);owner.resume();
 child.stdin.on('error',stop);
@@ -21,7 +35,7 @@ process.stdout.on('error',stop);process.stderr.on('error',stop);
 child.stdout.pipe(process.stdout);child.stderr.pipe(process.stderr);
 process.stdin.pipe(child.stdin);process.stdin.on('end',stop);process.on('SIGTERM',stop);process.on('SIGINT',stop);
 child.on('error',e=>{process.stderr.write(e.message);process.exit(127)});
-child.on('close',code=>{kill('SIGKILL');process.exitCode=code===null?130:code;owner.destroy();process.stdin.destroy()});
+child.on('close',code=>{if(!windows)killGroup('SIGKILL');process.exitCode=code===null?130:code;owner.destroy();process.stdin.destroy()});
 `;
 export function spawnOwnedTool(
   executable: string,
@@ -96,7 +110,7 @@ async function executableIn(name: string, directories: string[]): Promise<string
     if (!isAbsolute(directory)) continue; // Never execute a project-local program via PATH=.
     const candidate = join(directory, process.platform === 'win32' ? name + '.exe' : name);
     try {
-      await fs.access(candidate, constants.X_OK);
+      await fs.access(candidate, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
       if ((await fs.stat(candidate)).isFile()) return candidate;
     } catch {
       /* Continue detection. */
@@ -107,14 +121,26 @@ async function executableIn(name: string, directories: string[]): Promise<string
 export async function findExecutable(name: string): Promise<string | null> {
   return executableIn(name, (process.env.PATH ?? '').split(delimiter));
 }
-type LatexEnvironmentOptions = { home?: string; path?: string; override?: string };
+type LatexEnvironmentOptions = {
+  home?: string;
+  localAppData?: string;
+  path?: string;
+  override?: string;
+};
 function latexDirectories(options: LatexEnvironmentOptions = {}) {
   const home = options.home ?? homedir();
   const override = options.override ?? process.env.LOOM_TEX_PATH;
+  const localAppData = options.localAppData ?? process.env.LOCALAPPDATA;
+  const windowsTools = join(
+    localAppData && isAbsolute(localAppData) ? localAppData : join(home, 'AppData', 'Local'),
+    'LoomToolchain',
+  );
   const fallback =
     process.platform === 'linux' && process.arch === 'x64'
       ? [join(home, '.TinyTeX/bin/x86_64-linux'), join(home, '.local/share/loom/bin')]
-      : [];
+      : process.platform === 'win32' && process.arch === 'x64'
+        ? [join(windowsTools, 'TinyTeX', 'bin', 'windows'), join(windowsTools, 'texlab')]
+        : [];
   return [
     ...new Set(
       (override !== undefined
@@ -147,35 +173,41 @@ export function latexEnvironment(options: LatexEnvironmentOptions = {}): NodeJS.
       : {}),
   };
 }
+async function detectTool(name: Tool['name']): Promise<Tool> {
+  const executable = await findLatexExecutable(name);
+  if (!executable)
+    return {
+      name,
+      available: false,
+      version: 'Not found in configured tool directories',
+      executable: null,
+    };
+  try {
+    const result = await runTool(
+      executable,
+      [name === 'latexmk' ? '-v' : name === 'synctex' ? 'help' : '--version'],
+      {
+        timeoutMs: process.platform === 'win32' ? 15_000 : 5000,
+        env: latexEnvironment(),
+      },
+    );
+    return {
+      name,
+      available: result.code === 0,
+      version: result.output.trim().slice(0, 500),
+      executable,
+    };
+  } catch {
+    return { name, available: false, version: 'Version check failed or timed out', executable };
+  }
+}
+
 export async function detectTools(): Promise<Tool[]> {
-  return Promise.all(
-    toolNames.map(async (name) => {
-      const executable = await findLatexExecutable(name);
-      if (!executable)
-        return {
-          name,
-          available: false,
-          version: 'Not found in configured tool directories',
-          executable: null,
-        };
-      try {
-        const result = await runTool(
-          executable,
-          [name === 'latexmk' ? '-v' : name === 'synctex' ? 'help' : '--version'],
-          {
-            timeoutMs: 5000,
-            env: latexEnvironment(),
-          },
-        );
-        return {
-          name,
-          available: result.code === 0,
-          version: result.output.trim().slice(0, 500),
-          executable,
-        };
-      } catch {
-        return { name, available: false, version: 'Version check failed or timed out', executable };
-      }
-    }),
-  );
+  if (process.platform !== 'win32') return Promise.all(toolNames.map(detectTool));
+  // Creating several native supervisors at once can block Windows long enough
+  // to expire the first probe's timer before Node can handle its result.
+  const detected: Tool[] = [];
+  for (let index = 0; index < toolNames.length; index += 2)
+    detected.push(...(await Promise.all(toolNames.slice(index, index + 2).map(detectTool))));
+  return detected;
 }
