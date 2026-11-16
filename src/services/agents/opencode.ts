@@ -7,9 +7,9 @@ import type { AgentMessage, AgentModel, AgentSettings } from '../../contracts/ag
 
 import { harnessExecutable } from './runtime';
 import { openCodeServerEndpoint } from './startup';
-import { OpenCodeClassicAdapter, supportedClassicVersion } from './opencode-classic';
+import { OpenCodeClassicAdapter } from './opencode-classic';
 import { openCodeExecution } from './evidence';
-import { agentRequestError, readAgentSession } from './request-error';
+import { AgentRequestError, agentRequestError, readAgentSession } from './request-error';
 
 const nativeObject = z.record(z.string(), z.unknown());
 export const object = (value: unknown): Record<string, unknown> => nativeObject.parse(value);
@@ -17,9 +17,6 @@ export const list = (value: unknown): unknown[] => z.array(z.unknown()).parse(va
 export const string = (value: unknown, fallback = '') =>
   typeof value === 'string' ? value : fallback;
 export const dataList = (value: unknown) => list(object(value).data);
-export function supportedVersion(version: string) {
-  return /^2\.2\.(?:[1-9]\d*)(?:$|[-+])/.test(version);
-}
 export function privateEndpoint(endpoint: string) {
   const url = new URL(endpoint);
   if (
@@ -146,10 +143,6 @@ export class OpenCodeAdapter implements HarnessAdapter {
       throw new Error(
         'Install OpenCode and sign in with “opencode auth login”, then connect again.',
       );
-    if (!supportedVersion(found.version) && !supportedClassicVersion(found.version))
-      throw new Error(
-        `OpenCode ${found.version} is not supported. This Loom build supports OpenCode 1.19.x and 2.2.x from 2.2.1.`,
-      );
     const password = randomBytes(32).toString('hex');
     const child = spawnOwnedTool(
       found.executable,
@@ -180,11 +173,8 @@ export class OpenCodeAdapter implements HarnessAdapter {
         child.once('error', () => finish(new Error('OpenCode could not start.')));
         child.once('exit', () => finish(new Error('OpenCode stopped before connecting.')));
       });
-      const adapter = supportedClassicVersion(found.version)
-        ? new OpenCodeClassicAdapter(endpoint, password)
-        : new OpenCodeAdapter(endpoint, password);
+      const adapter = await this.attach(endpoint, password);
       adapter.adoptProcess(child);
-      await adapter.verify();
       // Verify authentication is actually enforced by this server implementation.
       const response = await fetch(
         endpoint + (adapter instanceof OpenCodeClassicAdapter ? '/global/health' : '/api/info'),
@@ -218,8 +208,15 @@ export class OpenCodeAdapter implements HarnessAdapter {
     try {
       await next.verify();
       return next;
-    } catch {
+    } catch (error) {
       await next.close();
+      // Only a missing endpoint or a non-info response identifies the classic API.
+      // Never turn authentication, server or transport failures into protocol fallback.
+      if (
+        !(error instanceof z.ZodError) &&
+        !(error instanceof AgentRequestError && [404, 405].includes(error.status ?? 0))
+      )
+        throw error;
     }
     const classic = new OpenCodeClassicAdapter(endpoint, password, username);
     await classic.verify();
@@ -235,13 +232,12 @@ export class OpenCodeAdapter implements HarnessAdapter {
     );
   }
   async verify() {
-    const info = object(await this.request('GET', '/api/info'));
-    this.version = string(info.version);
-    if (!supportedVersion(this.version))
-      throw new Error(
-        `OpenCode ${this.version || 'unknown'} is incompatible. This Loom build supports 2.2.x from 2.2.1.`,
-      );
+    const info = z
+      .object({ version: z.string().min(1) })
+      .parse(await this.request('GET', '/api/info'));
+    this.version = info.version;
   }
+
   async models(directory: string): Promise<AgentModel[]> {
     const response = await this.request(
       'GET',

@@ -9,33 +9,28 @@ import { ProjectService } from '../src/services/project/projects';
 import { BuildService } from '../src/services/latex/builds';
 import { AgentService } from '../src/services/agents/service';
 const live = process.env.LOOM_AGENT_LIVE === '1';
-it.skipIf(!live)(
-  'connects actual owned OpenCode and Codex processes, catalogs and project-bound sessions without inference',
-  async () => {
+it.skipIf(!live).each(['opencode', 'codex'] as const)(
+  'connects actual %s, catalogs and project-bound sessions without inference',
+  async (harness) => {
     const dir = await mkdtemp(join(tmpdir(), 'loom-harness-live-'));
-    let open: Awaited<ReturnType<typeof OpenCodeAdapter.owned>> | undefined,
-      codex: CodexAdapter | undefined;
+    let adapter: Awaited<ReturnType<typeof OpenCodeAdapter.owned>> | CodexAdapter | undefined;
     try {
       await writeFile(join(dir, 'main.tex'), 'Synthetic paper.');
-      open = await OpenCodeAdapter.owned(dir);
-      expect(open.version).toBe('2.2.1');
-      expect((await open.models(dir)).length).toBeGreaterThan(0);
-      const id = await open.create(dir);
-      expect((await open.session(id)).location).toMatchObject({ directory: dir });
-      expect(await open.pending(id)).toEqual({ permissions: [], questions: [] });
-      expect(await open.messages(id)).toEqual([]);
-      expect(await open.active(id)).toBe(false);
-      await open.stream();
-      codex = await CodexAdapter.owned(dir);
-      expect(codex.version).toMatch(/^0\.159\./);
-      expect((await codex.models(dir)).length).toBeGreaterThan(0);
-      const thread = await codex.create(dir);
-      expect((await codex.session(thread)).location).toMatchObject({ directory: dir });
-      await codex.resume(thread, dir);
-      expect(await codex.active(thread)).toBe(false);
+      adapter =
+        harness === 'opencode'
+          ? await OpenCodeAdapter.owned(dir, process.env.LOOM_OPENCODE_EXECUTABLE)
+          : await CodexAdapter.owned(dir, undefined, process.env.LOOM_CODEX_EXECUTABLE);
+      expect(adapter.version).toMatch(/\d+\.\d+\.\d+/);
+      expect((await adapter.models(dir)).length).toBeGreaterThan(0);
+      const id = await adapter.create(dir);
+      expect((await adapter.session(id)).location).toMatchObject({ directory: dir });
+      expect(await adapter.pending(id)).toEqual({ permissions: [], questions: [] });
+      expect(await adapter.messages(id)).toEqual([]);
+      expect(await adapter.active(id)).toBe(false);
+      if (adapter instanceof CodexAdapter) await adapter.resume(id, dir);
+      else await adapter.stream();
     } finally {
-      await open?.close();
-      await codex?.close();
+      await adapter?.close();
       await rm(dir, { recursive: true, force: true });
     }
   },
@@ -95,7 +90,12 @@ it.skipIf(process.env.LOOM_AGENT_INFERENCE !== '1')(
       agents = new AgentService(projects, builds, join(dir, 'data'));
     try {
       const projectId = projects.snapshot().id;
-      let state = await agents.command({ type: 'connect', projectId, harness: 'opencode' });
+      let state = await agents.command({
+        type: 'connect',
+        projectId,
+        harness: 'opencode',
+        executable: process.env.LOOM_OPENCODE_EXECUTABLE,
+      });
       const model = state.models.find(
         (m) =>
           m.providerId === 'opencode' &&
@@ -134,7 +134,13 @@ it.skipIf(process.env.LOOM_AGENT_INFERENCE !== '1')(
       }
       expect(state.error).toBe('');
       expect(state.running).toBe(false);
-      expect(state.turns[0].status).toBe('succeeded');
+      expect(
+        state.turns[0].status,
+        state.messages
+          .filter((m) => m.role === 'status' || m.role === 'assistant')
+          .map((m) => m.text)
+          .join('\n'),
+      ).toBe('succeeded');
       expect(state.messages.some((m) => m.role === 'assistant')).toBe(true);
       expect(
         await (await import('node:fs/promises')).readFile(join(root, 'main.tex'), 'utf8'),
@@ -177,7 +183,12 @@ it.skipIf(process.env.LOOM_CODEX_INFERENCE !== '1')(
     );
     try {
       const projectId = projects.snapshot().id;
-      let state = await agents.command({ type: 'connect', projectId, harness: 'codex' });
+      let state = await agents.command({
+        type: 'connect',
+        projectId,
+        harness: 'codex',
+        executable: process.env.LOOM_CODEX_EXECUTABLE,
+      });
       const model = state.models.find((m) => m.id.includes('luna')) ?? state.models[0];
       expect(model).toBeTruthy();
       state = await agents.command({ type: 'session', projectId });
@@ -212,17 +223,33 @@ it.skipIf(process.env.LOOM_CODEX_INFERENCE !== '1')(
       }
       expect(state.error).toBe('');
       expect(state.running).toBe(false);
-      expect(state.turns[0].status).toBe('succeeded');
+      expect(
+        state.turns[0].status,
+        state.messages
+          .filter((m) => m.role === 'status' || m.role === 'assistant')
+          .map((m) => m.text)
+          .join('\n'),
+      ).toBe('succeeded');
       expect(
         state.messages.some(
           (m) => m.role === 'tool' && m.text.includes('paper_structure') && m.state === 'completed',
+        ),
+        JSON.stringify(
+          state.messages
+            .filter((m) => m.role === 'tool')
+            .map((m) => ({ text: m.text, state: m.state })),
         ),
       ).toBe(true);
       expect(
         await (await import('node:fs/promises')).readFile(join(root, 'main.tex'), 'utf8'),
       ).toContain('Codex revised');
       await agents.command({ type: 'disconnect', projectId });
-      state = await agents.command({ type: 'connect', projectId, harness: 'codex' });
+      state = await agents.command({
+        type: 'connect',
+        projectId,
+        harness: 'codex',
+        executable: process.env.LOOM_CODEX_EXECUTABLE,
+      });
       expect(state.sessionId).toBe(sessionId);
       expect(state.messages.some((m) => m.role === 'assistant')).toBe(true);
       await agents.command({

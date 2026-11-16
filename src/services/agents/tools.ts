@@ -59,6 +59,12 @@ const toolInput = z.discriminatedUnion('name', [
     })
     .strict(),
 ]);
+// Transport metadata is independent of the tool's strictly validated arguments.
+const toolRequest = z
+  .object({ _meta: z.record(z.string(), z.unknown()).optional() })
+  .passthrough()
+  .transform(({ _meta, ...input }) => input)
+  .pipe(toolInput);
 const pathProperty = {
   type: 'string',
   minLength: 1,
@@ -300,7 +306,7 @@ export class AgentTools {
             ],
           };
         else if (call.method === 'tools/call') {
-          const p = toolInput.parse(call.params);
+          const p = toolRequest.parse(call.params);
           const value = await this.callTool(p);
           result = { content: [{ type: 'text', text: JSON.stringify(value) }] };
         } else {

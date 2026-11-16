@@ -8,11 +8,10 @@ import type { AgentMessage, AgentModel, AgentSettings } from '../../contracts/ag
 import type { spawnOwnedTool } from '../latex/tools';
 import { list, object, privateEndpoint, string, type HarnessAdapter } from './opencode';
 
-export const supportedClassicVersion = (version: string) => /^1\.19\.\d+(?:$|[-+])/.test(version);
 const query = (directory: string) => '?directory=' + encodeURIComponent(directory);
 const sessionPath = (id: string) => '/session/' + encodeURIComponent(id);
 
-/** Transport for the native 1.19 API. OpenCode owns the execution loop and history. */
+/** Transport for the native classic HTTP API. OpenCode owns the execution loop and history. */
 export class OpenCodeClassicAdapter implements HarnessAdapter {
   readonly capabilities = {
     streaming: true,
@@ -96,9 +95,9 @@ export class OpenCodeClassicAdapter implements HarnessAdapter {
     }
     if (!health) throw new Error('OpenCode did not report a healthy server.');
     this.version = string(health.version);
-    if (health.healthy !== true || !supportedClassicVersion(this.version))
+    if (health.healthy !== true || !this.version)
       throw new Error(
-        `OpenCode ${this.version || 'unknown'} is incompatible. This adapter supports 1.19.x.`,
+        'OpenCode did not report a healthy classic API. Check its server installation and retry.',
       );
   }
   async configureTools(directory: string, url: string, token: string) {

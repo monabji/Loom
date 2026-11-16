@@ -32,6 +32,44 @@ function fixture() {
 }
 
 describe('Codex adapter protocol boundaries', () => {
+  it.each([
+    { modalities: undefined, images: true },
+    { modalities: ['text'], images: false },
+    { modalities: ['text', 'image'], images: true },
+  ])('reads older and current model modalities ($images)', async ({ modalities, images }) => {
+    const { adapter } = fixture();
+    adapter.rpc = vi.fn(async () => ({
+      data: [{ id: 'model', model: 'model', displayName: 'Model', inputModalities: modalities }],
+      nextCursor: null,
+    }));
+    expect(await adapter.models('/paper')).toMatchObject([{ id: 'model', images }]);
+  });
+
+  it('retains the native failure reason when a Codex version rejects execution', async () => {
+    const { adapter } = fixture();
+    adapter.rpc = vi.fn(async () => ({ thread: { id: 'thread' } }));
+    await adapter.create('/paper');
+    adapter.receive({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thread',
+        turn: {
+          id: 'turn',
+          status: 'failed',
+          error: { message: 'Selected model requires a newer native API.' },
+        },
+      },
+    });
+    expect(await adapter.active('thread')).toBe(false);
+    expect(await adapter.messages('thread')).toMatchObject([
+      {
+        role: 'status',
+        state: 'failed',
+        text: expect.stringContaining('Selected model requires a newer native API.'),
+      },
+    ]);
+  });
+
   it.each(['once', 'reject'] as const)(
     'shows matching file-change paths without diffs and preserves the %s reply',
     async (reply) => {

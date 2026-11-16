@@ -1,12 +1,8 @@
 import { expect, it } from 'vitest';
 import { createServer } from 'node:http';
-import {
-  OpenCodeAdapter,
-  privateEndpoint,
-  supportedVersion,
-} from '../src/services/agents/opencode';
+import { OpenCodeAdapter, privateEndpoint } from '../src/services/agents/opencode';
 import { AgentRequestError } from '../src/services/agents/request-error';
-it('restricts attachment to explicit loopback origins and rejects unsupported versions', () => {
+it('restricts attachment to explicit loopback origins', () => {
   for (const url of [
     'https://127.0.0.1:1',
     'http://localhost:1',
@@ -17,8 +13,6 @@ it('restricts attachment to explicit loopback origins and rejects unsupported ve
   ])
     expect(() => privateEndpoint(url)).toThrow();
   expect(privateEndpoint('http://127.0.0.1:1234')).toBe('http://127.0.0.1:1234');
-  expect(supportedVersion('2.2.1')).toBe(true);
-  expect(supportedVersion('2.3.0')).toBe(false);
 });
 it('uses actual structured SDK permission/question bodies, refuses redirects and leaves attached server alive', async () => {
   let version = '2.2.1',
@@ -80,7 +74,8 @@ it('uses actual structured SDK permission/question bodies, refuses redirects and
     });
     rejectPrompt = false;
     version = '9.0.0';
-    await expect(adapter.verify()).rejects.toThrow('incompatible');
+    await expect(adapter.verify()).resolves.toBeUndefined();
+    expect(adapter.version).toBe('9.0.0');
     redirect = true;
     await expect(adapter.verify()).rejects.toThrow('outcome is uncertain');
     expect(operations.some((o) => o.path === '/unexpected')).toBe(false);

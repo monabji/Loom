@@ -69,7 +69,7 @@ The [setup script](scripts/setup-latex.mjs) downloads TinyTeX and TexLab into yo
 
 ### Connect an agent
 
-Install and authenticate OpenCode or Codex separately, then connect it through **Agent connections** in Loom. Supported versions are OpenCode 1.19.x or 2.2.x from 2.2.1, and Codex 0.159.x. The AppImage does not bundle these tools.
+Install and authenticate OpenCode or Codex separately, then connect it through **Agent connections** in Loom. Loom checks the native protocol when connecting instead of restricting specific minor versions. Both classic and current OpenCode servers and Codex app-server releases are supported when they provide the required APIs. See [harness compatibility](docs/harness-compatibility.md) for tested versions and limits. The AppImage does not bundle these tools.
 
 ## Development
 

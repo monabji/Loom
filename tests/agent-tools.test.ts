@@ -49,6 +49,13 @@ it('exposes authenticated bounded project/build MCP tools without a model execut
     const structure = (await call('tools/call', { name: 'paper_structure', arguments: {} })).data
       .result.content[0].text;
     expect(structure).toContain('Synthetic section');
+    const withMetadata = await call('tools/call', {
+      name: 'paper_structure',
+      arguments: {},
+      _meta: { progressToken: 1 },
+    });
+    expect(withMetadata.data.result.isError).not.toBe(true);
+    expect(withMetadata.data.result.content[0].text).toContain('Synthetic section');
     expect((await call('tools/call', { name: 'pdf_status', arguments: {} })).status).toBe(200);
     const errors = await call('tools/call', { name: 'paper_diagnostics', arguments: {} });
     expect(errors.data.result.isError).not.toBe(true);
@@ -56,7 +63,11 @@ it('exposes authenticated bounded project/build MCP tools without a model execut
       build: null,
       buildStatusAvailable: true,
     });
-    const bad = await call('tools/call', { name: 'build_pdf', arguments: { path: '../secret' } });
+    const bad = await call('tools/call', {
+      name: 'build_pdf',
+      arguments: { path: '../secret' },
+      _meta: { progressToken: 2 },
+    });
     expect(bad.status).toBe(200);
     expect(bad.data.result.isError).toBe(true);
     expect(bad.data.result.content[0].text).toContain('arguments');

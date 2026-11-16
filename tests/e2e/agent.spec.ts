@@ -2270,14 +2270,11 @@ test('authorized live native agent creates LaTeX files, compiles and safely reve
   await dialog.getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: 'Choose agent model', exact: true }).click();
   const models = page.getByRole('dialog', { name: 'Choose agent model', exact: true });
-  await models
-    .getByRole('textbox', { name: 'Search models' })
-    .fill(codex ? 'gpt-6.1-sol' : 'Big Pickle');
-  await models
-    .locator('[data-choice]')
-    .filter({ hasText: codex ? /gpt-6.1-sol/i : 'Big Pickle' })
-    .first()
-    .click();
+  const modelSearch = codex
+    ? (process.env.LOOM_CODEX_MODEL ?? 'gpt-6.1-sol')
+    : (process.env.LOOM_OPENCODE_MODEL ?? 'Big Pickle');
+  await models.getByRole('textbox', { name: 'Search models' }).fill(modelSearch);
+  await models.locator('[data-choice]').filter({ hasText: modelSearch }).first().click();
   await page.getByRole('button', { name: 'Permissions', exact: true }).click();
   await page
     .getByRole('dialog', { name: 'Permissions', exact: true })
@@ -2299,7 +2296,13 @@ test('authorized live native agent creates LaTeX files, compiles and safely reve
     for (let index = (await requestHeadings.count()) - 1; index >= 0; index -= 1) {
       const request = requestHeadings.nth(index).locator('..');
       if (!(await request.isVisible())) continue;
-      await expect(request).toContainText(/main\.tex|sections\/notes\.tex/);
+      if (/main\.tex|sections\/notes\.tex/.test(await request.innerText())) {
+        await expect(request).toContainText(/main\.tex|sections\/notes\.tex/);
+      } else {
+        // A native model may inspect the project directory before editing files.
+        await expect(requestHeadings.nth(index)).toHaveText('Permission needed: shell');
+        await expect(request).toContainText(root);
+      }
       if (approvedPermissions === 0) {
         expect(await readFile(join(root, 'main.tex'), 'utf8')).toBe(source);
         await expect(readFile(join(root, 'sections/notes.tex'))).rejects.toMatchObject({

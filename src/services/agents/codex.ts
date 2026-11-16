@@ -85,7 +85,7 @@ export class CodexAdapter implements HarnessAdapter {
     tool?: { url: string; token: string },
   ) {
     this.version = version;
-    const args = ['app-server', '--listen', 'stdio://'];
+    const args = ['app-server'];
     if (tool)
       args.push(
         '-c',
@@ -150,8 +150,6 @@ export class CodexAdapter implements HarnessAdapter {
     const found = await this.detect(executable);
     if (!found.installed || !found.executable)
       throw new Error('Install Codex and sign in with “codex login”, then connect again.');
-    if (!/^0\.159\./.test(found.version))
-      throw new Error(`Codex ${found.version} is incompatible. This Loom build supports 0.159.x.`);
     const adapter = new CodexAdapter(found.executable, directory, found.version, tool);
     try {
       await adapter.rpc('initialize', {
@@ -353,6 +351,7 @@ export class CodexAdapter implements HarnessAdapter {
             : 'failed';
       session.permissions.clear();
       session.questions.clear();
+      const failure = z.object({ message: z.string() }).safeParse(turn.error);
       session.messages.push({
         id: string(turn.id) + ':status',
         role: 'status',
@@ -361,7 +360,8 @@ export class CodexAdapter implements HarnessAdapter {
             ? 'Request complete'
             : session.outcome === 'interrupted'
               ? 'Request stopped · partial work is retained'
-              : 'Request failed · partial work is retained',
+              : 'Request failed · partial work is retained' +
+                (failure.success ? `: ${failure.data.message.slice(0, 1000)}` : ''),
         state: session.outcome,
       });
     }
@@ -382,7 +382,9 @@ export class CodexAdapter implements HarnessAdapter {
           id: string(m.model, string(m.id)),
           providerId: 'codex',
           name: string(m.displayName),
-          images: Array.isArray(m.inputModalities) && m.inputModalities.includes('image'),
+          images:
+            m.inputModalities === undefined ||
+            (Array.isArray(m.inputModalities) && m.inputModalities.includes('image')),
           tools: true,
           reasoningEfforts: Array.isArray(m.supportedReasoningEfforts)
             ? m.supportedReasoningEfforts

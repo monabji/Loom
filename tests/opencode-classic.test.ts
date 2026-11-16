@@ -3,10 +3,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import {
-  OpenCodeClassicAdapter,
-  supportedClassicVersion,
-} from '../src/services/agents/opencode-classic';
+import { OpenCodeClassicAdapter } from '../src/services/agents/opencode-classic';
 import { AgentRequestError } from '../src/services/agents/request-error';
 
 it('uses the classic API for directory-bound turns, permissions, questions and terminal outcomes', async () => {
@@ -108,8 +105,6 @@ it('uses the classic API for directory-bound turns, permissions, questions and t
   if (!address || typeof address === 'string') throw new Error('Fixture address');
   const adapter = new OpenCodeClassicAdapter(`http://127.0.0.1:${address.port}`, 'password');
   try {
-    expect(supportedClassicVersion('1.19.0')).toBe(true);
-    expect(supportedClassicVersion('1.20.0')).toBe(false);
     await adapter.verify();
     const models = await adapter.models('/paper');
     expect(models).toEqual([

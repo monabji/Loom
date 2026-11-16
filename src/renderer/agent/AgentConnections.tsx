@@ -489,8 +489,8 @@ export function AgentConnections(props: {
                   <span class="agent-summary-eyebrow">Local execution</span>
                   <h4>Runtime</h4>
                   <p>
-                    Choose the executable Loom launches on this device. Supported versions: OpenCode
-                    1.19.x and 2.2.x (minimum 2.2.1); Codex 0.159.x.
+                    Choose the OpenCode or Codex executable Loom launches on this device. Loom
+                    checks compatibility when connecting, including older and newer releases.
                   </p>
                 </div>
                 <label class="agent-runtime-field">
