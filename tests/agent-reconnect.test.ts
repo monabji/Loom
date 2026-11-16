@@ -181,4 +181,4 @@ it('leaves legacy ownership ambiguous and rejects unknown reconnect metadata wit
   } finally {
     await f.cleanup();
   }
-});
+}, 15000);

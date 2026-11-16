@@ -1,9 +1,13 @@
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { unzipSync } from 'fflate';
+import { createTestSymlink } from '../helpers/symlink';
+
+// Git/Electron startup is substantially slower on the Windows host.
+test.setTimeout(120_000);
 import {
   findExecutable,
   findLatexExecutable,
@@ -232,7 +236,10 @@ test('review, selective stage, commit, branch, and export a portable source ZIP 
 
 test('shows a Git type change for a symlink', async () => {
   await rm(join(root, 'main.tex'));
-  await symlink('refs.bib', join(root, 'main.tex'));
+  test.skip(
+    !(await createTestSymlink('refs.bib', join(root, 'main.tex'))),
+    'This Windows host does not permit symbolic links.',
+  );
   await page.getByRole('button', { name: /^Git ·/ }).click();
   const dialog = page.getByRole('dialog', { name: 'Git · repository review', exact: true });
   await expect(dialog.locator('.git-file').filter({ hasText: 'main.tex' })).toContainText(

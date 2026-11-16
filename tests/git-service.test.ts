@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gitResultSchema } from '../src/contracts/git';
 import { cloneRepository, GitService } from '../src/services/git/service';
 import { findExecutable, runTool } from '../src/services/latex/tools';
+import { createTestSymlink } from './helpers/symlink';
 
 const roots: string[] = [];
 async function repository() {
@@ -92,14 +93,17 @@ describe('Git status and diff service', () => {
     },
   );
 
-  it('validates staged and unstaged type changes through the response contract', async () => {
+  it('validates staged and unstaged type changes through the response contract', async ({
+    skip,
+  }) => {
     const setup = await repository();
     if (!setup) return;
     await writeFile(join(setup.root, 'main.tex'), 'text\n');
     await runTool(setup.git, ['-C', setup.root, 'add', '.']);
     await runTool(setup.git, ['-C', setup.root, 'commit', '-qm', 'base']);
     await rm(join(setup.root, 'main.tex'));
-    await symlink('target', join(setup.root, 'main.tex'));
+    if (!(await createTestSymlink('target', join(setup.root, 'main.tex'))))
+      skip('This Windows host does not permit symbolic links.');
     const service = new GitService(() => ({ root: setup.root, projectId: 'p', paths: [] }));
     for (const area of ['worktree', 'index'] as const) {
       if (area === 'index') await runTool(setup.git, ['-C', setup.root, 'add', 'main.tex']);
@@ -166,12 +170,13 @@ describe('Git status and diff service', () => {
     expect(
       (await git('rev-list', '--parents', '-n', '1', 'HEAD')).stdout.trim().split(' '),
     ).toHaveLength(3);
-  });
+  }, 120_000);
 
-  it('preserves whitespace at the end of a repository root', async () => {
+  it('preserves whitespace in a repository root path', async () => {
     const setup = await repository();
     if (!setup) return;
-    const root = join(setup.root, 'repo ');
+    // Win32 cannot use paths ending in a space as a process working directory.
+    const root = join(setup.root, process.platform === 'win32' ? 'repo name' : 'repo ');
     await mkdir(root);
     await runTool(setup.git, ['init', '-q', root]);
     await runTool(setup.git, ['-C', root, 'config', 'user.name', 'Test']);
@@ -193,7 +198,7 @@ describe('Git status and diff service', () => {
         expectedIndexTree: state.indexTree,
       }),
     ).resolves.toMatchObject({ repository: true });
-  });
+  }, 120_000);
 
   it('rejects externally staged gitlinks before committing', async () => {
     const setup = await repository();
@@ -430,7 +435,7 @@ describe('Git status and diff service', () => {
     });
     const branch = await service.command({ type: 'status', projectId: 'p' });
     expect(branch).toMatchObject({ kind: 'status', branch: 'codex/reviewed-work' });
-  });
+  }, 120_000);
 
   it('clones a local bare remote into a new destination and preserves failure destinations', async () => {
     const git = await findExecutable('git');
@@ -456,11 +461,9 @@ describe('Git status and diff service', () => {
       expect(result.code).toBe(0);
     }
     await cloneRepository(bare, destination);
-    expect(
-      await import('node:fs/promises').then(({ readFile }) =>
-        readFile(join(destination, 'main.tex'), 'utf8'),
-      ),
-    ).toBe('portable source\n');
+    expect((await readFile(join(destination, 'main.tex'), 'utf8')).replace(/\r\n/g, '\n')).toBe(
+      'portable source\n',
+    );
   });
 
   it('shows merge base/ours/theirs and keeps conflict stages until a resolved file is staged', async () => {
@@ -521,20 +524,28 @@ describe('Git status and diff service', () => {
     });
   });
 
-  it('treats wildcard filenames literally and leaves unrelated private files unstaged', async () => {
+  it('treats wildcard pathspec characters literally and leaves unrelated private files unstaged', async () => {
     const setup = await repository();
     if (!setup) return;
-    await writeFile(join(setup.root, '*'), 'literal name\n');
+    const literalPath = '[literal].tex';
+    await writeFile(join(setup.root, literalPath), 'literal name\n');
     await writeFile(join(setup.root, 'paper.tex'), 'ordinary source\n');
     await writeFile(join(setup.root, '.env'), 'TOKEN=synthetic\n');
     const service = new GitService(() => ({
       root: setup.root,
       projectId: 'p',
-      paths: ['*', 'paper.tex', '.env'],
+      paths: [literalPath, 'paper.tex', '.env'],
     }));
-    await service.command({ type: 'stage', projectId: 'p', path: '*' });
-    const names = await runTool(setup.git, ['-C', setup.root, 'diff', '--cached', '--name-only']);
-    expect(names.stdout.trim()).toBe('*');
+    await service.command({ type: 'stage', projectId: 'p', path: literalPath });
+    const names = await runTool(setup.git, [
+      '-C',
+      setup.root,
+      'diff',
+      '--cached',
+      '--name-only',
+      '-z',
+    ]);
+    expect(names.stdout).toBe(`${literalPath}\0`);
     expect(await service.command({ type: 'status', projectId: 'p' })).toMatchObject({
       files: expect.arrayContaining([
         expect.objectContaining({ path: 'paper.tex', index: '?' }),
@@ -759,7 +770,7 @@ describe('Git status and diff service', () => {
     await expect(service.command({ type: 'push', projectId: 'p' })).rejects.toThrow(
       /mirror pushes/,
     );
-  });
+  }, 120_000);
 
   it('reports when a Git hook changes the committed tree after index review', async () => {
     const setup = await repository();

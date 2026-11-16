@@ -1,11 +1,12 @@
 import { expect, it } from 'vitest';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MetadataStore } from '../src/services/project/store';
 import { ProjectService } from '../src/services/project/projects';
 import { BuildService } from '../src/services/latex/builds';
 import { AgentTools } from '../src/services/agents/tools';
+import { createTestSymlink } from './helpers/symlink';
 import { AgentChanges } from '../src/services/agents/changes';
 
 it('runs authenticated file organization through a saved checkpoint and preserves root identity and recoverable deletion', async () => {
@@ -105,8 +106,8 @@ it('runs authenticated file organization through a saved checkpoint and preserve
       (await readdir(join(root, 'manuscript'))).some((path) => path.startsWith('.loom-save-')),
     ).toBe(false);
     await writeFile(join(dir, 'outside.tex'), 'Outside data.');
-    await symlink(join(dir, 'outside.tex'), join(root, 'link.tex'));
-    for (const path of ['../outside.tex', '.git/config', 'link.tex'])
+    const hasSymlink = await createTestSymlink(join(dir, 'outside.tex'), join(root, 'link.tex'));
+    for (const path of ['../outside.tex', '.git/config', ...(hasSymlink ? ['link.tex'] : [])])
       expect((await call('paper_delete_file', { path })).isError).toBe(true);
     expect(await readFile(join(dir, 'outside.tex'), 'utf8')).toBe('Outside data.');
   } finally {

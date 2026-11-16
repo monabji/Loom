@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 import {
   OpenCodeClassicAdapter,
   supportedClassicVersion,
@@ -163,8 +164,12 @@ it('uses the classic API for directory-bound turns, permissions, questions and t
       variant: 'high',
       parts: [
         { type: 'text', text: 'Edit it' },
-        { type: 'file', url: 'file:///paper/paper.tex' },
-        { type: 'file', mime: 'image/png', url: 'file:///paper/board.PNG' },
+        { type: 'file', url: pathToFileURL('/paper/paper.tex').href },
+        {
+          type: 'file',
+          mime: 'image/png',
+          url: pathToFileURL('/paper/board.PNG').href,
+        },
       ],
     });
     expect((await adapter.pending('ses_1')).permissions).toEqual([

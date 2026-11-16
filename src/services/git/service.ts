@@ -149,11 +149,19 @@ export class GitService {
         };
       throw new Error('Git is unavailable. Install Git and reopen Loom.');
     }
+    const statusProbe = (args: string[], options: Parameters<typeof runTool>[2] = {}) =>
+      runTool(executable, ['-c', 'core.fsmonitor=false', ...args], options);
     if (command.type === 'status') {
-      const root = await runTool(executable, ['rev-parse', '--show-toplevel'], {
-        cwd: context.root,
-        timeoutMs: 10_000,
-      });
+      const [root, status] = await Promise.all([
+        statusProbe(['rev-parse', '--show-toplevel'], {
+          cwd: context.root,
+          timeoutMs: 10_000,
+        }),
+        statusProbe(
+          ['status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all', '--renames'],
+          { cwd: context.root, timeoutMs: 15_000, maxOutputBytes: 8 * 1024 * 1024 },
+        ),
+      ]);
       if (root.code !== 0)
         return {
           kind: 'status' as const,
@@ -175,11 +183,6 @@ export class GitService {
           remotes: [],
           commitNotice: null,
         };
-      const status = await runTool(
-        executable,
-        ['status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all', '--renames'],
-        { cwd: context.root, timeoutMs: 15_000, maxOutputBytes: 8 * 1024 * 1024 },
-      );
       if (status.code !== 0) throw new Error(status.output.slice(-1000) || 'Git status failed.');
       const projectPrefix = relative(gitLine(root.stdout), context.root).split(sep).join('/');
       const parsed = parseStatus(status.stdout);
@@ -201,11 +204,22 @@ export class GitService {
             ];
           })
         : parsed.files;
-      const remotes = await runTool(executable, ['remote'], {
-        cwd: context.root,
-        timeoutMs: 10_000,
-      });
-      const gitPath = await runTool(executable, ['rev-parse', '--absolute-git-dir'], {
+      const [remotes, gitPath, headTree, branchResult] = await Promise.all([
+        statusProbe(['remote'], { cwd: context.root, timeoutMs: 10_000 }),
+        statusProbe(['rev-parse', '--absolute-git-dir'], {
+          cwd: context.root,
+          timeoutMs: 10_000,
+        }),
+        statusProbe(['rev-parse', '--verify', 'HEAD^{tree}'], {
+          cwd: context.root,
+          timeoutMs: 10_000,
+        }),
+        statusProbe(['branch', '--format=%(refname:short)'], {
+          cwd: context.root,
+          timeoutMs: 10_000,
+        }),
+      ]);
+      const treeResult = await runTool(executable, ['write-tree'], {
         cwd: context.root,
         timeoutMs: 10_000,
       });
@@ -217,19 +231,7 @@ export class GitService {
         () => true,
         () => false,
       );
-      const treeResult = await runTool(executable, ['write-tree'], {
-        cwd: context.root,
-        timeoutMs: 10_000,
-      });
       const indexTree = treeResult.code === 0 ? treeResult.stdout.trim() : null;
-      const headTree = await runTool(executable, ['rev-parse', '--verify', 'HEAD^{tree}'], {
-        cwd: context.root,
-        timeoutMs: 10_000,
-      });
-      const branchResult = await runTool(executable, ['branch', '--format=%(refname:short)'], {
-        cwd: context.root,
-        timeoutMs: 10_000,
-      });
       return {
         kind: 'status' as const,
         repository: true,
@@ -312,19 +314,28 @@ export class GitService {
           );
           args =
             tracked.code === 0
-              ? literal('diff', '--no-ext-diff', '--no-color', '--', command.path)
+              ? literal('diff', '--no-ext-diff', '--no-textconv', '--no-color', '--', command.path)
               : [
                   '--literal-pathspecs',
                   'diff',
                   '--no-index',
                   '--no-ext-diff',
+                  '--no-textconv',
                   '--no-color',
                   '--',
                   process.platform === 'win32' ? 'NUL' : '/dev/null',
                   command.path,
                 ];
         } else
-          args = literal('diff', '--cached', '--no-ext-diff', '--no-color', '--', command.path);
+          args = literal(
+            'diff',
+            '--cached',
+            '--no-ext-diff',
+            '--no-textconv',
+            '--no-color',
+            '--',
+            command.path,
+          );
         const diff = await runTool(executable, args, {
           cwd: context.root,
           timeoutMs: 15_000,

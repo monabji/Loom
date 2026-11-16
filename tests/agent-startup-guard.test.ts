@@ -1,8 +1,9 @@
-import { expect, it, vi } from 'vitest';
-import { EventEmitter } from 'node:events';
+import { expect, it } from 'vitest';
+import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { MetadataStore } from '../src/services/project/store';
 import { ProjectService } from '../src/services/project/projects';
 
@@ -41,38 +42,35 @@ it('fails closed when future session references hide an unsettled external turn'
   );
   store.close();
 
-  const port = new EventEmitter() as EventEmitter & { postMessage: (value: unknown) => void };
-  const messages: Record<string, unknown>[] = [];
-  port.postMessage = (value) => {
-    messages.push(value as Record<string, unknown>);
-    port.emit('response');
-  };
-  const original = Object.getOwnPropertyDescriptor(process, 'parentPort');
-  const originalArg = process.argv[2];
-  Object.defineProperty(process, 'parentPort', { value: port, configurable: true });
-  process.argv[2] = data;
-  vi.spyOn(globalThis, 'setInterval').mockImplementation(
-    () => 0 as unknown as ReturnType<typeof setInterval>,
-  );
   try {
-    vi.resetModules();
-    await import('../src/services/index');
-    const send = async (id: string, type: string, command: unknown) => {
-      port.emit('message', { data: { type, id, command } });
-      for (let i = 0; i < 100; i++) {
-        const found = messages.find((message) => message.id === id);
-        if (found) return found.result as { ok: boolean; error?: { message: string } };
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-      throw new Error(`No response to ${id}`);
-    };
-    const agent = await send('agent', 'agent', { type: 'status', projectId: project.id });
-    const mutation = await send('delete', 'project', {
-      type: 'delete',
-      fileId: project.files[0].id,
+    const child = spawn(
+      process.execPath,
+      [fileURLToPath(new URL('./helpers/agent-startup-guard-child.mjs', import.meta.url)), data],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          LOOM_GUARD_PROJECT: project.id,
+          LOOM_GUARD_FILE: project.files[0].id,
+          LOOM_GUARD_ROOT: root,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    const code = await new Promise<number | null>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', resolve);
     });
-    const switching = await send('open', 'project', { type: 'native-open', path: root });
-    const read = await send('current', 'project', { type: 'current' });
+    expect(code, stderr).toBe(0);
+    const { agent, mutation, switching, read } = JSON.parse(stdout) as Record<
+      string,
+      { ok: boolean; error?: { message: string } }
+    >;
     for (const response of [agent, mutation, switching]) {
       expect(response.ok).toBe(false);
       expect(response.error?.message).toContain('Agent recovery could not be initialized');
@@ -83,11 +81,6 @@ it('fails closed when future session references hide an unsettled external turn'
       await import('node:fs/promises').then((fs) => fs.readFile(join(root, 'main.tex'), 'utf8')),
     ).toBe('author work');
   } finally {
-    vi.restoreAllMocks();
-    if (original) Object.defineProperty(process, 'parentPort', original);
-    else Reflect.deleteProperty(process, 'parentPort');
-    if (originalArg === undefined) delete process.argv[2];
-    else process.argv[2] = originalArg;
     await rm(dir, { recursive: true, force: true });
   }
-});
+}, 30000);
