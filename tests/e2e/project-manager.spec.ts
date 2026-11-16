@@ -1,6 +1,7 @@
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { electronLaunchOptions } from './helpers/launch';
 import { mkdtemp, readFile, rm, access } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir, homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 let app: ElectronApplication;
@@ -447,4 +448,53 @@ test('closing the last project saves writing, clears the workspace and permits d
   await expect(page.getByRole('heading', { name: 'Your projects', exact: true })).toBeFocused();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'A place for your next paper' })).toBeVisible();
+});
+
+test('saved provider handoff does not block creating a project after restart', async () => {
+  await create('Original paper');
+  const projectId = await page.evaluate(async () => {
+    const result = await window.loom!.project({ type: 'current' });
+    if (!result.ok || !result.value) throw new Error('No current project.');
+    return result.value.id;
+  });
+  await app.close();
+  const db = new DatabaseSync(join(dir, 'data', 'metadata.sqlite'));
+  try {
+    db.prepare('INSERT OR REPLACE INTO preferences VALUES (?,?)').run(
+      `agent-sessions:${projectId}`,
+      JSON.stringify({
+        version: 2,
+        sessions: [
+          {
+            id: 'saved-conversation',
+            harness: 'opencode',
+            title: 'Retained chat',
+            nativeSessions: { opencode: 'saved-native' },
+            pendingHandoff: ['codex'],
+            history: [
+              {
+                id: 'saved-message',
+                role: 'user',
+                text: 'Synthetic saved writing',
+                state: 'complete',
+              },
+            ],
+          },
+        ],
+        sessionId: 'saved-conversation',
+        harness: 'opencode',
+      }),
+    );
+  } finally {
+    db.close();
+  }
+  await launch();
+  await create('New paper');
+  expect(await readFile(join(dir, 'New paper', 'main.tex'), 'utf8')).toContain('\\documentclass');
+  await library();
+  await expect(page.getByRole('button', { name: 'Open New paper', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Open Original paper', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });

@@ -27,11 +27,22 @@ const builds = new BuildService(projects, join(process.argv[2], 'builds'));
 const agents = new AgentService(projects, builds, process.argv[2]);
 const research = new ResearchService(projects, () => agents.active());
 // Restore unresolved activity before a native project switch can escape its guard.
-const agentReady = agents.initialize().then(
-  () => null,
-  () =>
-    'Agent recovery could not be initialized. Keep your application data and reopen with a compatible Loom version before changing papers or files.',
-);
+let agentReady: Promise<string | null> | null = null;
+function agentRecoveryReady(): Promise<string | null> {
+  if (!agentReady) {
+    agentReady = agents.initialize().then(
+      () => null,
+      (error: unknown) => {
+        // A failed attempt must remain retryable without dropping recovery records.
+        agentReady = null;
+        const detail = error instanceof Error ? ` ${error.message}` : '';
+        return `Agent recovery could not be initialized.${detail} Keep your application data. Retry the operation after resolving the problem; incompatible data requires a compatible Loom version.`;
+      },
+    );
+  }
+  return agentReady;
+}
+void agentRecoveryReady();
 const agentRequest = z
   .object({ type: z.literal('agent'), id: z.string(), command: agentCommandSchema })
   .strict();
@@ -125,7 +136,7 @@ port.on('message', (event: { data: unknown }) => {
     .safeParse(event.data);
   if (researchRequest.success) {
     const { id, command } = researchRequest.data;
-    void agentReady
+    void agentRecoveryReady()
       .then((error) => {
         if (error && command.type !== 'search' && command.type !== 'cancel') throw new Error(error);
         return research.command(command);
@@ -155,7 +166,7 @@ port.on('message', (event: { data: unknown }) => {
   }
   const agent = agentRequest.safeParse(event.data);
   if (agent.success) {
-    void agentReady
+    void agentRecoveryReady()
       .then((recoveryError) => {
         if (removingProject)
           throw new Error('A project is moving to Trash. Wait for it to finish.');
@@ -280,7 +291,7 @@ port.on('message', (event: { data: unknown }) => {
     void (async () => {
       try {
         if (fileMutation) {
-          const recoveryError = await agentReady;
+          const recoveryError = await agentRecoveryReady();
           if (recoveryError) throw new Error(recoveryError);
           if (agents.active())
             throw new Error(
@@ -434,7 +445,7 @@ port.on('message', (event: { data: unknown }) => {
     });
     void (async () => {
       try {
-        const recoveryError = await agentReady;
+        const recoveryError = await agentRecoveryReady();
         if (recoveryError) throw new Error(recoveryError);
         if (agents.active())
           throw new Error('Finish the active agent request before opening the cloned project.');
@@ -472,7 +483,7 @@ port.on('message', (event: { data: unknown }) => {
     return;
   }
   void gitMutationBarrier
-    .then(() => agentReady)
+    .then(() => agentRecoveryReady())
     .then((recoveryError) =>
       projects.run(async () => {
         try {

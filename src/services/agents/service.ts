@@ -94,7 +94,11 @@ export class AgentService {
   async initialize() {
     // A disconnected drive retains its recovery records and must not lock the startup library.
     const current = await this.projects.run(() => this.projects.current(true));
-    if (current) await this.serialized(() => this.bind(current.id));
+    if (current)
+      await this.serialized(async () => {
+        if (this.projectId === current.id) await this.recoverInterrupted();
+        else await this.bind(current.id);
+      });
   }
   private serialized<T>(action: () => Promise<T>): Promise<T> {
     const next = this.queue.then(action);
@@ -299,9 +303,12 @@ export class AgentService {
       }
     }
     this.publishSessions();
+    await this.recoverInterrupted();
+  }
+  private async recoverInterrupted() {
     const recovered = await this.projects.run(() => this.changes.recoverInterrupted());
     if (!recovered)
-      this.state.error =
+      this.state!.error =
         'A previous agent process has not stopped. Wait for it to exit, then refresh to recover the paper.';
   }
   private async detect() {
