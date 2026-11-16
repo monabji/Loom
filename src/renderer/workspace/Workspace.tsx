@@ -567,7 +567,7 @@ export function Workspace() {
           error={projects.error()}
           current={projects.project()?.name}
           onContinue={() => navigateLibrary(false)}
-          onChoose={(choice) => void openProject(choice)}
+          onChoose={(choice) => void openProject(choice, choice === 'sample')}
           onOpen={async (projectId) => {
             const opened = await projects.choose({ projectId });
             if (opened) navigateLibrary(false);

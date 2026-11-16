@@ -20,8 +20,10 @@ async function dimensions(width: number, height: number): Promise<void> {
       const width = size.width + outerWidth - contentWidth;
       const height = size.height + outerHeight - contentHeight;
       window.setMaximumSize(0, 0);
-      window.setMinimumSize(width, height);
-      window.setMaximumSize(width, height);
+      if (process.platform !== 'win32') {
+        window.setMinimumSize(width, height);
+        window.setMaximumSize(width, height);
+      }
       window.setContentSize(size.width, size.height);
     },
     { width, height },
@@ -88,7 +90,8 @@ test.afterEach(async () => {
         .catch(() => {});
     await desktop.close();
   }
-  if (userData) await rm(userData, { recursive: true, force: true });
+  if (userData)
+    await rm(userData, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
 test('real isolated Electron boundary and a restartable utility process', async () => {
@@ -390,6 +393,39 @@ test('opens and saves a project whose root path has spaces and non-ASCII charact
   await expect(page.getByRole('textbox', { name: 'LaTeX source editor' })).toContainText(
     '% root path round trip',
   );
+});
+
+test('edits and saves CRLF source after the first line', async () => {
+  const folder = join(userData, 'crlf-project');
+  await mkdir(folder);
+  await writeFile(join(folder, 'main.tex'), 'first\r\nsecond\r\nthird\r\n');
+  await desktop.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
+  }, folder);
+  await page
+    .getByRole('button', { name: /^(Open or create project|More options)$/, exact: true })
+    .click();
+  await page
+    .getByRole('dialog', { name: 'Projects', exact: true })
+    .getByRole('button', { name: 'Open folder', exact: true })
+    .click();
+  const editor = page.getByRole('textbox', { name: 'LaTeX source editor' });
+  await expect(editor).toBeVisible({ timeout: 20000 });
+  await editor.press('Control+Home');
+  await editor.press('ArrowDown');
+  await editor.press('End');
+  await editor.pressSequentially(' edit');
+  await editor.press('Enter');
+  await editor.pressSequentially('inserted');
+  await expect(editor.locator('.cm-line').nth(2)).toHaveText('inserted');
+  await editor.press('Control+z');
+  await expect(editor.locator('.cm-line').nth(2)).not.toHaveText('inserted');
+  await editor.press('Control+y');
+  await expect(editor.locator('.cm-line').nth(2)).toHaveText('inserted');
+  await editor.press('Control+s');
+  await expect
+    .poll(() => readFile(join(folder, 'main.tex'), 'utf8'), { timeout: 30000 })
+    .toBe('first\r\nsecond edit\r\ninserted\r\nthird\r\n');
 });
 
 test('sidebar footer, folder navigation and row focus remain stable with many files', async () => {
@@ -1004,6 +1040,7 @@ test('fuzzy filename navigation, live search refresh, IME and clearing remain us
 });
 
 test('IndexedDB-only edits survive renderer crash with disk divergence', async () => {
+  test.skip(process.platform !== 'linux', 'SIGSTOP failure injection is validated on Linux.');
   const folder = await openSyntheticProject();
   const original = await readFile(join(folder, 'main.tex'), 'utf8');
   const pid = await readyPid();

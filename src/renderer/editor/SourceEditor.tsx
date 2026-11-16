@@ -2,7 +2,7 @@ import { languageExtensions } from '../latex/editor';
 import type { LatexWorkspace } from '../latex/workspace';
 import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
-import { EditorState, EditorSelection, Compartment, Prec } from '@codemirror/state';
+import { EditorState, EditorSelection, Compartment, Prec, Text } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import {
   searchKeymap,
@@ -16,6 +16,7 @@ import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import type { ProjectWorkspace } from './documents';
 import { projectSearchHighlights } from './searchHighlights';
+import { editorOffset, lineEndingBinding } from './lineEndings';
 // Stock CodeMirror colors target light surfaces. Resolve every colored role through Loom's dark tokens.
 const sourceHighlight = HighlightStyle.define([
   {
@@ -56,14 +57,18 @@ export function SourceEditor(props: { workspace: ProjectWorkspace; latex: LatexW
     let cancelled = false;
     void d.ready.then(() => {
       if (cancelled || !d.initialized) return;
-      const caret = w.caret(id);
+      const caret = w.editorCaret(id);
+      const source = d.doc.getText('source');
+      const raw = source.toString();
+      const text = Text.of(raw.split(/\r\n?|\n/));
+      const preserveLineEndings = navigator.platform.startsWith('Win') || raw.includes('\r');
       view = new EditorView({
         parent: host,
         state: EditorState.create({
-          doc: d.doc.getText('source').toString(),
+          doc: text,
           selection: EditorSelection.single(
-            Math.min(caret?.anchor ?? 0, d.doc.getText('source').length),
-            Math.min(caret?.head ?? 0, d.doc.getText('source').length),
+            Math.min(caret?.anchor ?? 0, text.length),
+            Math.min(caret?.head ?? 0, text.length),
           ),
           extensions: [
             languageExtensions(w, props.latex, id),
@@ -103,7 +108,7 @@ export function SourceEditor(props: { workspace: ProjectWorkspace; latex: LatexW
               }),
             ),
             keymap.of([
-              ...yUndoManagerKeymap,
+              ...(!preserveLineEndings ? yUndoManagerKeymap : []),
               ...searchKeymap,
               ...defaultKeymap,
               indentWithTab,
@@ -115,7 +120,9 @@ export function SourceEditor(props: { workspace: ProjectWorkspace; latex: LatexW
                 },
               },
             ]),
-            yCollab(d.doc.getText('source'), undefined, { undoManager: d.undo }),
+            preserveLineEndings
+              ? lineEndingBinding(d)
+              : yCollab(source, undefined, { undoManager: d.undo }),
             wrap.of(w.wrap() ? EditorView.lineWrapping : []),
             font.of(EditorView.theme({ '&': { fontSize: `${w.font()}px` } })),
             EditorView.theme(
@@ -150,11 +157,17 @@ export function SourceEditor(props: { workspace: ProjectWorkspace; latex: LatexW
       view.dom.addEventListener('loom:find', () => openSearchPanel(view!));
       const locate = (event: Event) => {
         const target = (event as CustomEvent<{ offset: number; length: number }>).detail;
-        const offset = Math.max(0, Math.min(target.offset, view!.state.doc.length));
+        const raw = source.toString();
+        const limit = view!.state.doc.length;
+        const offset = Math.max(0, Math.min(editorOffset(raw, target.offset), limit));
+        const end = Math.max(
+          offset,
+          Math.min(editorOffset(raw, target.offset + target.length), limit),
+        );
         view!.dispatch({
           selection: {
             anchor: offset,
-            head: Math.min(offset + target.length, view!.state.doc.length),
+            head: end,
           },
           scrollIntoView: true,
         });

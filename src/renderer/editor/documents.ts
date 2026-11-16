@@ -10,6 +10,7 @@ import type {
 } from '../../contracts/project';
 import { layoutSchema, type Layout } from '../workspace/layout';
 import { createProjectSearch } from './projectSearch';
+import { rawSourceOffset } from './lineEndings';
 export type Caret = { anchor: number; head: number; scroll: number };
 export type LiveDocument = {
   doc: Y.Doc;
@@ -458,7 +459,17 @@ export function createProjectWorkspace(
       setWrap(v);
       preferences();
     },
-    caret: (id: string) => carets.get(id),
+    editorCaret: (id: string) => carets.get(id),
+    caret: (id: string) => {
+      const caret = carets.get(id);
+      const source = docs.get(id)?.doc.getText('source').toString();
+      if (!caret || !source?.includes('\r\n')) return caret;
+      return {
+        ...caret,
+        anchor: rawSourceOffset(source, caret.anchor),
+        head: rawSourceOffset(source, caret.head),
+      };
+    },
     saveCaret: (id: string, c: Caret) => {
       carets.set(id, c);
       preferences();
